@@ -1,0 +1,1 @@
+enum TipoMovimentacao { receita, despesa }
