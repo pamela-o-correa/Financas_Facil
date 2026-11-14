@@ -207,17 +207,41 @@ class AvisoDesativadas extends StatelessWidget {
   final int quantidade;
   final VoidCallback onVer;
   @override
-  Widget build(BuildContext context) => quantidade == 0
-      ? const SizedBox.shrink()
-      : Card(
-          child: ListTile(
-            leading: const Icon(Icons.pause_circle_outline),
-            title: Text(
-              '$quantidade ${quantidade == 1 ? 'movimentação desativada' : 'movimentações desativadas'} neste período',
-            ),
-            subtitle: const Text('Fora dos totais. Toque para revisar.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: onVer,
+  Widget build(BuildContext context) {
+    if (quantidade == 0) return const SizedBox.shrink();
+    final semantica = CoresSemanticas.de(context);
+    final esquema = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      color: semantica.alertaFundo,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(RaioBorda.cartao),
+        side: BorderSide(color: semantica.alerta.withValues(alpha: 0.35)),
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: semantica.alerta.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(RaioBorda.sm),
           ),
-        );
+          child: Icon(
+            Icons.pause_circle_outline,
+            color: semantica.alerta,
+          ),
+        ),
+        title: Text(
+          '$quantidade ${quantidade == 1 ? 'movimentação desativada' : 'movimentações desativadas'} neste período',
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        subtitle: Text(
+          'Fora dos totais. Toque para revisar.',
+          style: TextStyle(fontSize: 12, color: esquema.onSurfaceVariant),
+        ),
+        trailing: Icon(Icons.chevron_right, color: esquema.onSurfaceVariant),
+        onTap: onVer,
+      ),
+    );
+  }
 }

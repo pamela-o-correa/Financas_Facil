@@ -161,6 +161,8 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
 
   @override
   Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    final semantica = CoresSemanticas.de(context);
     final concluidos = _arquivos.where((a) => a.resultado != null).toList();
     final pendentes = _arquivos.where((a) => a.resultado == null).toList();
     final quantidade = concluidos.fold(
@@ -178,52 +180,189 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text(
-              'Selecione os arquivos, escolha a conta de destino e revise cada extrato. Arquivos concluídos são salvos individualmente; um erro não apaga os anteriores.',
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: esquema.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                border: Border.all(
+                  color: esquema.outlineVariant.withValues(alpha: 0.7),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: esquema.primaryContainer.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.upload_file_outlined,
+                      size: 20,
+                      color: esquema.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Selecione os arquivos, escolha a conta de destino e revise cada extrato. Arquivos concluídos são salvos individualmente; um erro não apaga os anteriores.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: esquema.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: _ocupado ? null : _adicionar,
               icon: const Icon(Icons.add),
               label: const Text('Adicionar arquivos CSV'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
             ),
+            const SizedBox(height: 10),
             OutlinedButton.icon(
               onPressed: _ocupado ? null : _escolherConta,
-              icon: const Icon(Icons.account_balance),
+              icon: const Icon(Icons.account_balance_outlined),
               label: Text(_conta?.rotulo ?? 'Escolher conta de destino'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
             ),
-            const Text(
+            const SizedBox(height: 8),
+            Text(
               'A conta escolhida será usada nos arquivos pendentes. Para arquivos de outra conta, altere o destino antes de revisar.',
+              style: TextStyle(
+                fontSize: 12,
+                color: esquema.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
-            Text(
-              '${concluidos.length} arquivos importados • ${pendentes.length} pendentes\n$quantidade lançamentos salvos • $duplicatas possíveis duplicatas sinalizadas',
-            ),
-            if (_arquivos.isNotEmpty)
-              const Text(
-                'As possíveis duplicatas são conferidas na revisão; não são excluídas automaticamente. Ao sair, os arquivos pendentes precisarão ser selecionados novamente.',
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: esquema.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                border: Border.all(
+                  color: esquema.outlineVariant.withValues(alpha: 0.7),
+                ),
               ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${concluidos.length} arquivos importados • ${pendentes.length} pendentes\n$quantidade lançamentos salvos • $duplicatas possíveis duplicatas sinalizadas',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.45,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (_arquivos.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'As possíveis duplicatas são conferidas na revisão; não são excluídas automaticamente. Ao sair, os arquivos pendentes precisarão ser selecionados novamente.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: esquema.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
             const SizedBox(height: 12),
             for (final item in _arquivos)
               Card(
+                elevation: 0,
+                margin: const EdgeInsets.only(bottom: 10),
+                color: esquema.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                  side: BorderSide(
+                    color: esquema.outlineVariant.withValues(alpha: 0.65),
+                  ),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.arquivo.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      Row(
+                        children: [
+                          Icon(
+                            item.resultado != null
+                                ? Icons.check_circle_outline
+                                : item.status.startsWith('Erro:')
+                                ? Icons.error_outline
+                                : Icons.description_outlined,
+                            size: 20,
+                            color: item.resultado != null
+                                ? semantica.receita
+                                : item.status.startsWith('Erro:')
+                                ? esquema.error
+                                : esquema.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.arquivo.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(item.status),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.status,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: item.resultado != null
+                              ? semantica.receita
+                              : item.status.startsWith('Erro:')
+                              ? esquema.error
+                              : esquema.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         'Destino: ${item.resultado != null ? item.conta!.rotulo : _conta?.rotulo ?? 'Escolha uma conta'}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: esquema.onSurfaceVariant,
+                        ),
                       ),
-                      if (item.resultado != null)
+                      if (item.resultado != null) ...[
+                        const SizedBox(height: 4),
                         Text(
                           '${item.resultado!.quantidade} lançamentos salvos • ${item.resultado!.duplicatas} possíveis duplicatas • ${item.resultado!.descartadas} linhas descartadas pelo leitor',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: esquema.onSurfaceVariant,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
-                      if (item.resultado == null)
+                      ],
+                      if (item.resultado == null) ...[
+                        const SizedBox(height: 6),
                         Wrap(
                           spacing: 8,
                           children: [
@@ -243,6 +382,7 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
                             ),
                           ],
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -252,10 +392,17 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
               onPressed: _ocupado || _conta == null || pendentes.isEmpty
                   ? null
                   : () => _processar(pendentes),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
               child: Text(
                 _ocupado ? 'Processando…' : 'Revisar todos os pendentes',
               ),
             ),
+            const SizedBox(height: 6),
             TextButton(
               onPressed: _ocupado
                   ? null

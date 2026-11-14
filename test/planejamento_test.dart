@@ -217,4 +217,92 @@ void main() {
     }
     expect(find.text('Salvar compromisso'), findsOneWidget);
   });
+
+  testWidgets(
+    'Detalhes do compromisso exibem metadados semânticos e formulário aceita separador de milhar',
+    (tester) async {
+      var centavosSalvos = 0;
+      final banco = _AgendaGravavelTeste(
+        itens: [compromisso()],
+        aoSalvar: (centavos) => centavosSalvos = centavos,
+      );
+      await tester.pumpWidget(
+        app(
+          TelaAgenda(
+            banco: banco,
+            perfil: 1,
+            nomePerfil: 'Teste',
+            categorias: const {
+              'despesa': ['Outros'],
+              'receita': ['Outros'],
+            },
+            onRealizado: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      while (find
+          .text('Compromisso com descrição longa para verificar a leitura')
+          .evaluate()
+          .isEmpty) {
+        await tester.drag(find.byType(ListView).first, const Offset(0, -250));
+        await tester.pumpAndSettle();
+      }
+      await tester.ensureVisible(
+        find.text('Compromisso com descrição longa para verificar a leitura').first,
+      );
+      await tester.tap(
+        find.text('Compromisso com descrição longa para verificar a leitura').first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Despesa prevista'), findsOneWidget);
+      expect(find.text('Conta: Minha carteira'), findsOneWidget);
+      expect(find.text('Observação do compromisso'), findsOneWidget);
+
+      await tester.tap(find.text('Editar'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Valor (R\$)'),
+        '1.250,50',
+      );
+      await tester.scrollUntilVisible(
+        find.text('Salvar compromisso'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Salvar compromisso'));
+      await tester.pumpAndSettle();
+
+      expect(centavosSalvos, 125050);
+    },
+  );
+}
+
+class _AgendaGravavelTeste extends AgendaTeste {
+  _AgendaGravavelTeste({required List<Previsto> itens, required this.aoSalvar})
+    : super(itens);
+
+  final void Function(int centavos) aoSalvar;
+
+  @override
+  Future<void> salvar({
+    Previsto? existente,
+    required String titulo,
+    required String tipo,
+    required int centavos,
+    required String categoria,
+    required DateTime data,
+    required String frequencia,
+    required int quantidade,
+    required int? lembrete,
+    required int hora,
+    required int minuto,
+    String conta = '',
+    String observacoes = '',
+  }) async {
+    aoSalvar(centavos);
+  }
 }

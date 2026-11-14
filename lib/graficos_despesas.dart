@@ -14,7 +14,8 @@ class GrupoDespesa {
   final String chave;
   String nome;
   final List<Movimentacao> itens = [];
-  double get total => itens.fold<int>(0, (s, m) => s + m.centavos) / 100;
+  int get totalCentavos => itens.fold<int>(0, (s, m) => s + m.centavos);
+  double get total => totalCentavos / 100;
 }
 
 List<GrupoDespesa> agruparDespesas(
@@ -86,19 +87,12 @@ class GraficoDespesasAlternavel extends StatelessWidget {
       restante = '$restante •';
     }
     if (compacto && grupos.length > 4) {
-      totais.add(
-        MapEntry(restante, grupos.skip(4).fold(0.0, (s, g) => s + g.total)),
-      );
+      final restanteCentavos = grupos
+          .skip(4)
+          .fold<int>(0, (s, g) => s + g.totalCentavos);
+      totais.add(MapEntry(restante, restanteCentavos / 100));
     }
-    const paleta = [
-      Color(0xFF7986CB),
-      Color(0xFF4DB6AC),
-      Color(0xFFFF8A65),
-      Color(0xFFBA68C8),
-      Color(0xFF64B5F6),
-      Color(0xFFFFB74D),
-      Color(0xFF90A4AE),
-    ];
+    final paleta = CoresSemanticas.de(context).paletaGrafico;
     Color cor(GrupoDespesa grupo) {
       if (modo == AgrupamentoDespesa.categoria) {
         return coresCategorias[grupo.nome] ?? paleta.last;
@@ -109,6 +103,11 @@ class GraficoDespesasAlternavel extends StatelessWidget {
       );
       return paleta[indice];
     }
+
+    final totalGeralCentavos = grupos.fold<int>(
+      0,
+      (s, g) => s + g.totalCentavos,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -135,7 +134,7 @@ class GraficoDespesasAlternavel extends StatelessWidget {
         else
           GraficoRoscaCategorias(
             totais: totais,
-            total: grupos.fold(0.0, (s, g) => s + g.total),
+            total: totalGeralCentavos / 100,
             cores: {
               for (final g in grupos) g.nome: cor(g),
               restante: paleta.last,

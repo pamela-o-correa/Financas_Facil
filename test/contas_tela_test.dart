@@ -46,6 +46,29 @@ class BancoTeste extends ContasBanco {
     apagouDados = apagarDados;
     contas.removeWhere((c) => c.id == contaId);
   }
+
+  @override
+  Future<List<Map<String, Object?>>> resumo(
+    DateTime inicio,
+    DateTime fim,
+  ) async => [
+    {
+      'codigo': '260',
+      'banco_nome': 'Nubank',
+      'quantidade': 12,
+      'entradas': 3500.00,
+      'saidas': 1200.50,
+      'volume': 4700.50,
+    },
+    {
+      'codigo': '001',
+      'banco_nome': 'Banco do Brasil',
+      'quantidade': 5,
+      'entradas': 1000.00,
+      'saidas': 400.00,
+      'volume': 1400.00,
+    },
+  ];
 }
 
 void main() {
@@ -135,6 +158,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nova'), findsOneWidget);
     expect(find.textContaining('Não foi possível'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Relatório por banco exibe indicadores e barras proporcionais', (
+    tester,
+  ) async {
+    final banco = BancoTeste();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TelaRelatorioBancos(banco: banco),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nubank'), findsOneWidget);
+    expect(find.text('Banco do Brasil'), findsOneWidget);
+    expect(find.textContaining('12 transações'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 }

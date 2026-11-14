@@ -18,122 +18,181 @@ class GraficoRoscaCategorias extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final esquema = Theme.of(context).colorScheme;
+    final paleta = CoresSemanticas.de(context).paletaGrafico;
     final coresFatias = [
-      for (final item in totais) cores[item.key] ?? esquema.primary,
+      for (var i = 0; i < totais.length; i++)
+        cores[totais[i].key] ?? paleta[i % paleta.length],
     ];
     final legenda = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < totais.length; i++)
-          InkWell(
-            onTap: () => onCategoria(totais[i].key),
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5),
-                    child: Icon(Icons.circle, size: 10, color: coresFatias[i]),
+          Builder(
+            builder: (context) {
+              final proporcao =
+                  total <= 0 ? 0.0 : (totais[i].value / total).clamp(0.0, 1.0);
+              return InkWell(
+                onTap: () => onCategoria(totais[i].key),
+                borderRadius: BorderRadius.circular(RaioBorda.sm),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 7,
+                    horizontal: 4,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          totais[i].key,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          '${(total <= 0 ? 0 : totais[i].value / total * 100).toStringAsFixed(1).replaceAll('.', ',')}% • ${dinheiroAgenda((totais[i].value * 100).round())}',
-                          style: TextStyle(
-                            fontSize: 12,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: coresFatias[i],
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  totais[i].key,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  '${(proporcao * 100).toStringAsFixed(1).replaceAll('.', ',')}% • ${dinheiroAgenda((totais[i].value * 100).round())}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: esquema.onSurfaceVariant,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
                             color: esquema.onSurfaceVariant,
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: proporcao,
+                          minHeight: 4,
+                          backgroundColor: esquema.outlineVariant.withValues(
+                            alpha: 0.35,
+                          ),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            coresFatias[i],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
       ],
     );
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: esquema.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
+    return Material(
+      color: esquema.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(RaioBorda.cartao),
+        side: BorderSide(
+          color: esquema.outlineVariant.withValues(alpha: 0.65),
+        ),
       ),
-      child: LayoutBuilder(
-        builder: (context, limites) {
-          final ladoALado =
-              limites.maxWidth >= 300 &&
-              MediaQuery.textScalerOf(context).scale(14) <= 18;
-          final tamanho = ladoALado
-              ? math.min(190.0, limites.maxWidth * .45)
-              : math.min(220.0, limites.maxWidth);
-          final grafico = Semantics(
-            label:
-                'Total de despesas: ${dinheiroAgenda((total * 100).round())}. Distribuição na legenda.',
-            child: SizedBox(
-              width: tamanho,
-              height: tamanho,
-              child: CustomPaint(
-                painter: _PintorRoscaCategorias(
-                  valores: totais.map((e) => e.value).toList(),
-                  cores: coresFatias,
-                  vazio: esquema.outlineVariant,
-                ),
-                child: Center(
-                  child: SizedBox(
-                    width: tamanho * .64,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            dinheiroAgenda((total * 100).round()),
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (context, limites) {
+            final ladoALado =
+                limites.maxWidth >= 300 &&
+                MediaQuery.textScalerOf(context).scale(14) <= 18;
+            final tamanho = ladoALado
+                ? math.min(190.0, limites.maxWidth * .45)
+                : math.min(220.0, limites.maxWidth);
+            final grafico = Semantics(
+              label:
+                  'Total de despesas: ${dinheiroAgenda((total * 100).round())}. Distribuição na legenda.',
+              child: SizedBox(
+                width: tamanho,
+                height: tamanho,
+                child: CustomPaint(
+                  painter: _PintorRoscaCategorias(
+                    valores: totais.map((e) => e.value).toList(),
+                    cores: coresFatias,
+                    vazio: esquema.outlineVariant,
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: tamanho * .64,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              dinheiroAgenda((total * 100).round()),
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        const FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text('Despesas'),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Despesas',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: esquema.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          );
-          if (ladoALado) {
-            return Row(
+            );
+            if (ladoALado) {
+              return Row(
+                children: [
+                  grafico,
+                  const SizedBox(width: 16),
+                  Expanded(child: legenda),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                grafico,
-                const SizedBox(width: 16),
-                Expanded(child: legenda),
+                Center(child: grafico),
+                const SizedBox(height: 16),
+                legenda,
               ],
             );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(child: grafico),
-              const SizedBox(height: 16),
-              legenda,
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }

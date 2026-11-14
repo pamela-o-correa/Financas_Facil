@@ -139,30 +139,135 @@ class _TelaPerfisState extends State<TelaPerfis> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Perfis')),
-    body: FutureBuilder<List<PerfilFinanceiro>>(future: _consulta, builder: (context, snapshot) {
-      if (snapshot.hasError) { return Center(child: TextButton(
-        onPressed: () => setState(() => _consulta = CadastroPerfis.listar()), child: const Text('Tentar novamente'))); }
-      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-      return ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('Escolha o perfil que deseja usar. Cada perfil tem seus próprios dados financeiros.'),
-        const SizedBox(height: 16),
-        for (final perfil in snapshot.data!) Card(child: ListTile(
-          enabled: !_ocupado,
-          leading: Icon(perfil.tipo == 'pessoal' ? Icons.person_outline : Icons.business_outlined),
-          title: Text(perfil.nome),
-          subtitle: Text('${perfil.tipo == 'pessoal' ? 'Pessoal' : 'Profissional'}'
-            '${perfil.id == CadastroPerfis.atual.value.id ? ' • Em uso' : ''}'),
-          onTap: () => Navigator.pop(context, perfil),
-          trailing: IconButton(tooltip: 'Editar perfil', onPressed: _ocupado ? null : () => _editar(perfil),
-            icon: const Icon(Icons.edit_outlined)),
-        )),
-        const SizedBox(height: 12),
-        FilledButton.icon(onPressed: _ocupado ? null : () => _editar(),
-          icon: const Icon(Icons.add), label: const Text('Criar perfil')),
-        if (_ocupado) const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
-      ]);
-    }),
-  );
+  Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Perfis')),
+      body: FutureBuilder<List<PerfilFinanceiro>>(
+        future: _consulta,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: TextButton(
+                onPressed: () =>
+                    setState(() => _consulta = CadastroPerfis.listar()),
+                child: const Text('Tentar novamente'),
+              ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: esquema.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: esquema.outlineVariant.withValues(alpha: 0.7),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.switch_account_outlined,
+                      size: 20,
+                      color: esquema.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Escolha o perfil que deseja usar. Cada perfil tem seus próprios dados financeiros.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: esquema.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              for (final perfil in snapshot.data!)
+                Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  color: esquema.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: BorderSide(
+                      color: perfil.id == CadastroPerfis.atual.value.id
+                          ? esquema.primary
+                          : esquema.outlineVariant.withValues(alpha: 0.65),
+                      width: perfil.id == CadastroPerfis.atual.value.id
+                          ? 1.5
+                          : 1,
+                    ),
+                  ),
+                  child: ListTile(
+                    enabled: !_ocupado,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: esquema.primaryContainer.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        perfil.tipo == 'pessoal'
+                            ? Icons.person_outline
+                            : Icons.business_outlined,
+                        size: 20,
+                        color: esquema.primary,
+                      ),
+                    ),
+                    title: Text(
+                      perfil.nome,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      '${perfil.tipo == 'pessoal' ? 'Pessoal' : 'Profissional'}'
+                      '${perfil.id == CadastroPerfis.atual.value.id ? ' • Em uso' : ''}',
+                      style: TextStyle(color: esquema.onSurfaceVariant),
+                    ),
+                    onTap: () => Navigator.pop(context, perfil),
+                    trailing: IconButton(
+                      tooltip: 'Editar perfil',
+                      onPressed: _ocupado ? null : () => _editar(perfil),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _ocupado ? null : () => _editar(),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Criar perfil'),
+              ),
+              if (_ocupado)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: LinearProgressIndicator(),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }

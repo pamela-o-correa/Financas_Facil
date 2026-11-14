@@ -202,23 +202,33 @@ class _TelaExportacaoState extends State<TelaExportacao> {
     }
   }
 
-  Widget _secao(String titulo, List<Widget> filhos) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            titulo,
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 14),
-          ...filhos,
-        ],
+  Widget _secao(String titulo, List<Widget> filhos) {
+    final cores = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      color: cores.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: cores.outlineVariant.withValues(alpha: 0.65)),
       ),
-    ),
-  );
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              titulo,
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 14),
+            ...filhos,
+          ],
+        ),
+      ),
+    );
+  }
   Widget _campo(
     String rotulo,
     String valor,
@@ -283,32 +293,52 @@ class _TelaExportacaoState extends State<TelaExportacao> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: cores.primaryContainer,
-                        borderRadius: BorderRadius.circular(20),
+                        color: cores.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: cores.outlineVariant.withValues(alpha: 0.7),
+                        ),
                       ),
-                      child: Column(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.description_outlined,
-                            color: cores.onPrimaryContainer,
-                            size: 32,
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: cores.primaryContainer.withValues(
+                                alpha: 0.65,
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Icon(
+                              Icons.description_outlined,
+                              color: cores.primary,
+                              size: 24,
+                            ),
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Suas finanças, em detalhes',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(
-                                  color: cores.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Suas finanças, em detalhes',
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Escolha os dados e o formato. Depois, salve ou compartilhe.',
-                            style: TextStyle(color: cores.onPrimaryContainer),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Escolha os dados e o formato. Depois, salve ou compartilhe.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: cores.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -406,12 +436,17 @@ class _TelaExportacaoState extends State<TelaExportacao> {
                         '$quantidade registros nos filtros selecionados',
                         style: TextStyle(
                           color: cores.primary,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Totais consideram apenas movimentações ativas, sem transferências internas. Previsões ficam separadas dos valores realizados.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cores.onSurfaceVariant,
+                        ),
                       ),
                     ]),
                     _secao('3. Formato', [
@@ -420,16 +455,19 @@ class _TelaExportacaoState extends State<TelaExportacao> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Material(
                             color: _formato == formato
-                                ? cores.secondaryContainer
+                                ? cores.primaryContainer.withValues(alpha: 0.45)
                                 : cores.surface,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                             child: ListTile(
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                                 side: BorderSide(
                                   color: _formato == formato
                                       ? cores.primary
-                                      : cores.outlineVariant,
+                                      : cores.outlineVariant.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                  width: _formato == formato ? 1.5 : 1,
                                 ),
                               ),
                               leading: Icon(
@@ -438,13 +476,24 @@ class _TelaExportacaoState extends State<TelaExportacao> {
                                     : formato == FormatoRelatorio.xlsx
                                     ? Icons.table_chart_outlined
                                     : Icons.grid_on_outlined,
+                                color: _formato == formato
+                                    ? cores.primary
+                                    : cores.onSurfaceVariant,
                               ),
-                              title: Text(formato.titulo),
+                              title: Text(
+                                formato.titulo,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                               subtitle: Text(formato.descricao),
                               trailing: Icon(
                                 _formato == formato
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
+                                color: _formato == formato
+                                    ? cores.primary
+                                    : cores.onSurfaceVariant,
                               ),
                               onTap: () => _mudar(() => _formato = formato),
                             ),
@@ -461,13 +510,23 @@ class _TelaExportacaoState extends State<TelaExportacao> {
                           onChanged: (v) => _mudar(() => _detalhar = v),
                         ),
                       if (_formato == FormatoRelatorio.csv)
-                        const Text(
+                        Text(
                           'CSV preserva os dados exportados para consulta. A restauração completa do aplicativo por esse arquivo ainda não está disponível.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cores.onSurfaceVariant,
+                          ),
                         ),
                     ]),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                     FilledButton.icon(
                       onPressed: _ocupado ? null : _gerar,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
                       icon: _ocupado
                           ? const SizedBox(
                               width: 18,

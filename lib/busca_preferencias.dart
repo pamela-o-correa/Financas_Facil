@@ -245,95 +245,161 @@ class _TelaPreferenciasContabilizacaoState
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Preferências de contabilização')),
-    body: FutureBuilder<(List<PreferenciaContabilizacao>, List<ContaOrigem>)>(
-      future: _dados,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: TextButton(
-              onPressed: () => setState(() => _dados = _carregar()),
-              child: const Text('Tentar novamente'),
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final (regras, contas) = snapshot.data!;
-        final nomes = {for (final c in contas) c.id: c.rotulo};
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text(
-              'As preferências geram sugestões na importação. Você decide se deseja aplicá-las. A correspondência usa a mesma conta, tipo e descrição completa.',
-            ),
-            const SizedBox(height: 12),
-            if (regras.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  'Nenhuma preferência salva. Ao ativar ou desativar uma movimentação com conta identificada, escolha Lembrar preferência.',
+  Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    final semantica = CoresSemanticas.de(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Preferências de contabilização')),
+      body: FutureBuilder<(List<PreferenciaContabilizacao>, List<ContaOrigem>)>(
+        future: _dados,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: TextButton(
+                onPressed: () => setState(() => _dados = _carregar()),
+                child: const Text('Tentar novamente'),
+              ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final (regras, contas) = snapshot.data!;
+          final nomes = {for (final c in contas) c.id: c.rotulo};
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: esquema.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                  border: Border.all(
+                    color: esquema.outlineVariant.withValues(alpha: 0.7),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.fact_check_outlined,
+                      size: 20,
+                      color: esquema.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'As preferências geram sugestões na importação. Você decide se deseja aplicá-las. A correspondência usa a mesma conta, tipo e descrição completa.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: esquema.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            for (final r in regras)
-              Card(
-                child: ListTile(
-                  title: Text(
-                    r.descricao,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 12),
+              if (regras.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Text(
+                    'Nenhuma preferência salva. Ao ativar ou desativar uma movimentação com conta identificada, escolha Lembrar preferência.',
                   ),
-                  subtitle: Text(
-                    '${nomes[r.contaId]} • ${r.tipo == TipoMovimentacao.receita ? 'Receita' : 'Despesa'}\n${r.habilitada ? 'Sugerir contabilização ${r.ativa ? 'ativa' : 'desativada'}' : 'Preferência pausada'}',
+                ),
+              for (final r in regras)
+                Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  color: esquema.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                    side: BorderSide(
+                      color: esquema.outlineVariant.withValues(alpha: 0.65),
+                    ),
                   ),
-                  onTap: () => showDialog<void>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Descrição da preferência'),
-                      content: SingleChildScrollView(
-                        child: SelectableText(r.descricao),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: r.tipo == TipoMovimentacao.receita
+                            ? semantica.receitaFundo
+                            : semantica.despesaFundo,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Fechar'),
+                      child: Icon(
+                        r.tipo == TipoMovimentacao.receita
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward,
+                        size: 20,
+                        color: r.tipo == TipoMovimentacao.receita
+                            ? semantica.receita
+                            : semantica.despesa,
+                      ),
+                    ),
+                    title: Text(
+                      r.descricao,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      '${nomes[r.contaId]} • ${r.tipo == TipoMovimentacao.receita ? 'Receita' : 'Despesa'}\n${r.habilitada ? 'Sugerir contabilização ${r.ativa ? 'ativa' : 'desativada'}' : 'Preferência pausada'}',
+                      style: TextStyle(color: esquema.onSurfaceVariant),
+                    ),
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Descrição da preferência'),
+                        content: SingleChildScrollView(
+                          child: SelectableText(r.descricao),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Fechar'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      enabled: !_ocupado,
+                      tooltip: 'Editar preferência',
+                      onSelected: (acao) => _alterar(r, acao),
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: 'pausar',
+                          child: Text(
+                            r.habilitada
+                                ? 'Pausar preferência'
+                                : 'Reativar preferência',
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'inverter',
+                          child: Text(
+                            r.ativa ? 'Sugerir desativação' : 'Sugerir ativação',
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'excluir',
+                          child: Text('Excluir preferência'),
                         ),
                       ],
                     ),
                   ),
-                  trailing: PopupMenuButton<String>(
-                    enabled: !_ocupado,
-                    tooltip: 'Editar preferência',
-                    onSelected: (acao) => _alterar(r, acao),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: 'pausar',
-                        child: Text(
-                          r.habilitada
-                              ? 'Pausar preferência'
-                              : 'Reativar preferência',
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'inverter',
-                        child: Text(
-                          r.ativa ? 'Sugerir desativação' : 'Sugerir ativação',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'excluir',
-                        child: Text('Excluir preferência'),
-                      ),
-                    ],
-                  ),
                 ),
-              ),
-          ],
-        );
-      },
-    ),
-  );
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 

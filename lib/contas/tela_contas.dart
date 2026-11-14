@@ -78,104 +78,148 @@ class _TelaEscolherContaState extends State<TelaEscolherConta> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(
-        widget.editarConta == null ? 'Conta de origem' : 'Editar conta',
+  Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.editarConta == null ? 'Conta de origem' : 'Editar conta',
+        ),
       ),
-    ),
-    body: Form(
-      key: _form,
-      child: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            widget.editarConta == null
-                ? 'Escolha a conta de origem. Reutilize uma conta já cadastrada para novos arquivos.'
-                : 'Altere o nome ou banco desta conta. Os lançamentos e importações permanecem vinculados.',
-          ),
-          const SizedBox(height: 20),
-          if (widget.editarConta == null)
-            DropdownButtonFormField<int>(
-              initialValue: _id ?? -1,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Conta'),
-              items: [
-                const DropdownMenuItem(
-                  value: -1,
-                  child: Text('Cadastrar nova conta'),
+      body: Form(
+        key: _form,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: esquema.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: esquema.outlineVariant.withValues(alpha: 0.65),
                 ),
-                ...widget.contas
-                    .where(
-                      (c) =>
-                          widget.bancoDetectado == 'generico' ||
-                          c.bancoCodigo == widget.bancoDetectado,
-                    )
-                    .map(
-                      (c) => DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.rotulo, overflow: TextOverflow.ellipsis),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.account_balance_outlined,
+                    size: 20,
+                    color: esquema.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.editarConta == null
+                          ? 'Escolha a conta de origem. Reutilize uma conta já cadastrada para novos arquivos.'
+                          : 'Altere o nome ou banco desta conta. Os lançamentos e importações permanecem vinculados.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: esquema.onSurfaceVariant,
                       ),
                     ),
-              ],
-              onChanged: (v) => setState(() => _id = v == -1 ? null : v),
-            ),
-          if (_id == null) ...[
-            const SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              key: ValueKey(_banco),
-              initialValue: _banco,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Banco'),
-              items: _bancos.entries
-                  .map(
-                    (b) => DropdownMenuItem(value: b.key, child: Text(b.value)),
-                  )
-                  .toList(),
-              onChanged: widget.bancoDetectado == 'generico'
-                  ? (v) => setState(() => _banco = v!)
-                  : null,
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
-            if (widget.bancoDetectado == 'generico')
-              TextButton.icon(
-                onPressed: _adicionarBanco,
-                icon: const Icon(Icons.add),
-                label: const Text('Adicionar banco'),
+            if (widget.editarConta == null)
+              DropdownButtonFormField<int>(
+                initialValue: _id ?? -1,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Conta'),
+                items: [
+                  const DropdownMenuItem(
+                    value: -1,
+                    child: Text('Cadastrar nova conta'),
+                  ),
+                  ...widget.contas
+                      .where(
+                        (c) =>
+                            widget.bancoDetectado == 'generico' ||
+                            c.bancoCodigo == widget.bancoDetectado,
+                      )
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text(
+                            c.rotulo,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                ],
+                onChanged: (v) => setState(() => _id = v == -1 ? null : v),
               ),
-            TextFormField(
-              controller: _nome,
-              maxLength: 80,
-              decoration: const InputDecoration(
-                labelText: 'Nome da conta',
-                hintText: 'Ex.: Conta pessoal • final 1234',
+            if (_id == null) ...[
+              const SizedBox(height: 20),
+              DropdownButtonFormField<String>(
+                key: ValueKey(_banco),
+                initialValue: _banco,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Banco'),
+                items: _bancos.entries
+                    .map(
+                      (b) =>
+                          DropdownMenuItem(value: b.key, child: Text(b.value)),
+                    )
+                    .toList(),
+                onChanged: widget.bancoDetectado == 'generico'
+                    ? (v) => setState(() => _banco = v!)
+                    : null,
               ),
-              validator: (v) => (v ?? '').trim().isEmpty
-                  ? 'Informe um nome para identificar esta conta.'
-                  : null,
+              const SizedBox(height: 12),
+              if (widget.bancoDetectado == 'generico')
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _adicionarBanco,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Adicionar banco'),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _nome,
+                maxLength: 80,
+                decoration: const InputDecoration(
+                  labelText: 'Nome da conta',
+                  hintText: 'Ex.: Conta pessoal • final 1234',
+                ),
+                validator: (v) => (v ?? '').trim().isEmpty
+                    ? 'Informe um nome para identificar esta conta.'
+                    : null,
+              ),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () {
+                if (!_form.currentState!.validate()) return;
+                final conta = _id == null
+                    ? ContaOrigem(
+                        nome: _nome.text.trim(),
+                        bancoCodigo: _banco,
+                        nomeBanco: _bancos[_banco],
+                      )
+                    : widget.contas.firstWhere((c) => c.id == _id);
+                Navigator.pop(context, conta);
+              },
+              child: Text(
+                widget.editarConta == null ? 'Continuar' : 'Salvar alterações',
+              ),
             ),
           ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () {
-              if (!_form.currentState!.validate()) return;
-              final conta = _id == null
-                  ? ContaOrigem(
-                      nome: _nome.text.trim(),
-                      bancoCodigo: _banco,
-                      nomeBanco: _bancos[_banco],
-                    )
-                  : widget.contas.firstWhere((c) => c.id == _id);
-              Navigator.pop(context, conta);
-            },
-            child: Text(
-              widget.editarConta == null ? 'Continuar' : 'Salvar alterações',
-            ),
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class TelaContas extends StatefulWidget {
@@ -422,85 +466,149 @@ class _TelaContasState extends State<TelaContas> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Contas/Bancos'),
-      actions: [
-        IconButton(
-          tooltip: 'Relatório por banco',
-          icon: const Icon(Icons.bar_chart),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => TelaRelatorioBancos(banco: widget.banco),
+  Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Contas/Bancos'),
+        actions: [
+          IconButton(
+            tooltip: 'Relatório por banco',
+            icon: const Icon(Icons.bar_chart),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TelaRelatorioBancos(banco: widget.banco),
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-    floatingActionButton: FloatingActionButton(
-      onPressed: _ocupado ? null : _adicionar,
-      child: const Icon(Icons.add),
-    ),
-    body: FutureBuilder<List<ContaOrigem>>(
-      future: _consulta,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Center(
-            child: Text('Não foi possível carregar as contas.'),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-          children: [
-            const Text(
-              'As contas pertencem ao perfil atual. Movimentações antigas permanecem sem origem identificada.',
-            ),
-            if (snapshot.data!.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'Nenhuma conta cadastrada. Toque em + para adicionar.',
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _ocupado ? null : _adicionar,
+        child: const Icon(Icons.add),
+      ),
+      body: FutureBuilder<List<ContaOrigem>>(
+        future: _consulta,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('Não foi possível carregar as contas.'),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: esquema.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: esquema.outlineVariant.withValues(alpha: 0.65),
+                  ),
                 ),
-              ),
-            ...snapshot.data!.map(
-              (c) => ListTile(
-                leading: const Icon(Icons.account_balance_outlined),
-                title: Text(c.nome),
-                subtitle: Text(c.bancoNome),
-                trailing: PopupMenuButton<String>(
-                  tooltip: 'Opções da conta',
-                  enabled: !_ocupado,
-                  onSelected: (acao) {
-                    if (acao == 'editar') _editar(c);
-                    if (acao == 'reunir') _reunir(c);
-                    if (acao == 'excluir') _excluir(c);
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'editar',
-                      child: Text('Editar nome/banco'),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: esquema.primary,
                     ),
-                    PopupMenuItem(
-                      value: 'reunir',
-                      child: Text('Reunir com outra conta'),
-                    ),
-                    PopupMenuItem(
-                      value: 'excluir',
-                      child: Text('Excluir conta'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'As contas pertencem ao perfil atual. Movimentações antigas permanecem sem origem identificada.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: esquema.onSurfaceVariant,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
-        );
-      },
-    ),
-  );
+              if (snapshot.data!.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Nenhuma conta cadastrada. Toque em + para adicionar.',
+                  ),
+                ),
+              ...snapshot.data!.map(
+                (c) => Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  color: esquema.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: esquema.outlineVariant.withValues(alpha: 0.65),
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: esquema.primaryContainer.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.account_balance_outlined,
+                        size: 20,
+                        color: esquema.primary,
+                      ),
+                    ),
+                    title: Text(
+                      c.nome,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      c.bancoNome,
+                      style: TextStyle(color: esquema.onSurfaceVariant),
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      tooltip: 'Opções da conta',
+                      enabled: !_ocupado,
+                      onSelected: (acao) {
+                        if (acao == 'editar') _editar(c);
+                        if (acao == 'reunir') _reunir(c);
+                        if (acao == 'excluir') _excluir(c);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'editar',
+                          child: Text('Editar nome/banco'),
+                        ),
+                        PopupMenuItem(
+                          value: 'reunir',
+                          child: Text('Reunir com outra conta'),
+                        ),
+                        PopupMenuItem(
+                          value: 'excluir',
+                          child: Text('Excluir conta'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class TelaRelatorioBancos extends StatefulWidget {
@@ -525,81 +633,160 @@ class _TelaRelatorioBancosState extends State<TelaRelatorioBancos> {
   String _valor(Object? n) =>
       'R\$ ${(n as num? ?? 0).toStringAsFixed(2).replaceAll('.', ',')}';
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Movimentação por banco')),
-    body: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        OutlinedButton.icon(
-          icon: const Icon(Icons.date_range),
-          label: Text('${_data(_periodo.start)} a ${_data(_periodo.end)}'),
-          onPressed: () async {
-            final periodo = await showDateRangePicker(
-              context: context,
-              firstDate: DateTime(1900),
-              lastDate: DateTime(2100),
-              initialDateRange: _periodo,
-            );
-            if (periodo != null && mounted) {
-              setState(() {
-                _periodo = periodo;
-                _consulta = _carregar();
-              });
-            }
-          },
-        ),
-        const Text(
-          'Ordenado pelo total de entradas + saídas. Transferências registradas também entram na movimentação; este total não representa lucro.',
-        ),
-        FutureBuilder<List<Map<String, Object?>>>(
-          future: _consulta,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return const Text('Não foi possível carregar o relatório.');
-            }
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.data!.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('Nenhuma movimentação neste período.'),
+  Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Movimentação por banco')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          OutlinedButton.icon(
+            icon: const Icon(Icons.date_range),
+            label: Text(
+              '${_data(_periodo.start)} a ${_data(_periodo.end)}',
+              style: const TextStyle(
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+            onPressed: () async {
+              final periodo = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(1900),
+                lastDate: DateTime(2100),
+                initialDateRange: _periodo,
               );
-            }
-            final total = snapshot.data!.fold<double>(
-              0,
-              (s, b) => s + (b['volume'] as num).toDouble(),
-            );
-            return Column(
-              children: snapshot.data!
-                  .map(
-                    (b) => Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              b['banco_nome'] as String,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            Text('Movimentação: ${_valor(b['volume'])}'),
-                            Text(
-                              'Entradas: ${_valor(b['entradas'])} • Saídas: ${_valor(b['saidas'])}',
-                            ),
-                            Text(
-                              '${b['quantidade']} transações • ${total == 0 ? '0' : ((b['volume'] as num) / total * 100).toStringAsFixed(1)}% do total',
-                            ),
-                          ],
-                        ),
+              if (periodo != null && mounted) {
+                setState(() {
+                  _periodo = periodo;
+                  _consulta = _carregar();
+                });
+              }
+            },
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Ordenado pelo total de entradas + saídas. Transferências registradas também entram na movimentação; este total não representa lucro.',
+            style: TextStyle(fontSize: 12.5, color: esquema.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          FutureBuilder<List<Map<String, Object?>>>(
+            future: _consulta,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text('Não foi possível carregar o relatório.');
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.data!.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('Nenhuma movimentação neste período.'),
+                );
+              }
+              final total = snapshot.data!.fold<double>(
+                0,
+                (s, b) => s + (b['volume'] as num).toDouble(),
+              );
+              return Column(
+                children: snapshot.data!.map((b) {
+                  final volume = (b['volume'] as num).toDouble();
+                  final proporcao =
+                      total <= 0 ? 0.0 : (volume / total).clamp(0.0, 1.0);
+                  return Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    color: esquema.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: BorderSide(
+                        color: esquema.outlineVariant.withValues(alpha: 0.65),
                       ),
                     ),
-                  )
-                  .toList(),
-            );
-          },
-        ),
-      ],
-    ),
-  );
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: esquema.primaryContainer.withValues(
+                                    alpha: 0.65,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.account_balance_outlined,
+                                  size: 18,
+                                  color: esquema.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  b['banco_nome'] as String,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Movimentação: ${_valor(b['volume'])}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Entradas: ${_valor(b['entradas'])} • Saídas: ${_valor(b['saidas'])}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: esquema.onSurfaceVariant,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${b['quantidade']} transações • ${total == 0 ? '0' : ((b['volume'] as num) / total * 100).toStringAsFixed(1)}% do total',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: esquema.onSurfaceVariant,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: proporcao,
+                              minHeight: 5,
+                              backgroundColor: esquema.outlineVariant
+                                  .withValues(alpha: 0.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }

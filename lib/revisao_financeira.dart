@@ -319,39 +319,107 @@ class _TelaTransferenciasState extends State<TelaTransferencias> {
                       )),
             )
             .toList();
+        final esquema = Theme.of(context).colorScheme;
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text(widget.periodo),
-            const Text(
-              'Sugestões com valores iguais, contas diferentes e até 3 dias de diferença. Um dos lados deve estar no período; o outro pode estar fora dele. Confirme somente transferências entre suas próprias contas.',
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: esquema.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                border: Border.all(
+                  color: esquema.outlineVariant.withValues(alpha: 0.65),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.periodo,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: esquema.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sugestões com valores iguais, contas diferentes e até 3 dias de diferença. Um dos lados deve estar no período; o outro pode estar fora dele. Confirme somente transferências entre suas próprias contas.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: esquema.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Text(
               'Sugestões (${pares.length})',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
-            if (pares.isEmpty) const Text('Nenhuma sugestão neste período.'),
+            const SizedBox(height: 8),
+            if (pares.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Nenhuma sugestão neste período.',
+                  style: TextStyle(color: esquema.onSurfaceVariant),
+                ),
+              ),
             for (final (s, e) in pares)
               Card(
+                elevation: 0,
+                margin: const EdgeInsets.only(bottom: 10),
+                color: esquema.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                  side: BorderSide(
+                    color: esquema.outlineVariant.withValues(alpha: 0.65),
+                  ),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         dinheiroAgenda((s.valor * 100).round()),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
                       ),
-                      Text('${conta(s)} → ${conta(e)}'),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${conta(s)} → ${conta(e)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: esquema.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         '${data(s)} • ${s.descricao}\n${data(e)} • ${e.descricao}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: esquema.onSurfaceVariant,
+                        ),
                       ),
-                      TextButton(
-                        onPressed: _ocupado
-                            ? null
-                            : () => _confirmar(s, e, conta(s), conta(e)),
-                        child: const Text('Revisar transferência'),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _ocupado
+                              ? null
+                              : () => _confirmar(s, e, conta(s), conta(e)),
+                          icon: const Icon(Icons.swap_horiz, size: 18),
+                          label: const Text('Revisar transferência'),
+                        ),
                       ),
                     ],
                   ),
@@ -360,23 +428,41 @@ class _TelaTransferenciasState extends State<TelaTransferencias> {
             const SizedBox(height: 16),
             Text(
               'Confirmadas (${confirmadas.length})',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
+            const SizedBox(height: 8),
             for (final m in confirmadas)
-              ListTile(
-                title: Text(
-                  '${conta(m)} • ${dinheiroAgenda((m.valor * 100).round())}',
+              Card(
+                elevation: 0,
+                margin: const EdgeInsets.only(bottom: 8),
+                color: esquema.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                  side: BorderSide(
+                    color: esquema.outlineVariant.withValues(alpha: 0.65),
+                  ),
                 ),
-                subtitle: Text('${data(m)} • ${m.descricao}'),
-                trailing: TextButton(
-                  onPressed: _ocupado
-                      ? null
-                      : () => _executar(
-                          () =>
-                              OperacoesFinanceiras(widget.banco.database)
-                                  .desfazerTransferencia(m.id!),
-                        ),
-                  child: const Text('Desfazer'),
+                child: ListTile(
+                  title: Text(
+                    '${conta(m)} • ${dinheiroAgenda((m.valor * 100).round())}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  subtitle: Text('${data(m)} • ${m.descricao}'),
+                  trailing: TextButton(
+                    onPressed: _ocupado
+                        ? null
+                        : () => _executar(
+                            () =>
+                                OperacoesFinanceiras(widget.banco.database)
+                                    .desfazerTransferencia(m.id!),
+                          ),
+                    child: const Text('Desfazer'),
+                  ),
                 ),
               ),
           ],
@@ -639,9 +725,15 @@ class _TelaRevisarCategoriasState extends State<TelaRevisarCategorias> {
                       final m = itens[i];
                       return CheckboxListTile(
                         value: _selecionados.contains(m.id),
-                        title: Text(m.descricao),
+                        title: Text(
+                          m.descricao,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         subtitle: Text(
                           '${m.data.day}/${m.data.month}/${m.data.year} • ${m.categoria} • ${dinheiroAgenda((m.valor * 100).round())}',
+                          style: const TextStyle(
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
                         onChanged: _ocupado
                             ? null
@@ -663,6 +755,12 @@ class _TelaRevisarCategoriasState extends State<TelaRevisarCategorias> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                   onPressed: _ocupado || _selecionados.isEmpty
                       ? null
                       : () => _classificar(snapshot.data!.$2),

@@ -1,8 +1,5 @@
 part of 'main.dart';
 
-const _verdeCalendario = Color(0xFF55D997);
-const _vermelhoCalendario = Color(0xFFFF7787);
-
 String _tituloDiaCalendario(DateTime dia) {
   const semana = [
     'Segunda-feira',
@@ -39,156 +36,175 @@ class _ResumoCalendario extends StatelessWidget {
   final int receber, pagar;
   final ColorScheme cores;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(8),
-    decoration: BoxDecoration(
-      color: cores.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: cores.outlineVariant),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Resumo do mês',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-              ),
-            ),
-            Tooltip(
-              message:
-                  'Inclui compromissos pagos e em aberto; exclui cancelados. '
-                  'Previsões só alteram o saldo real após confirmação.',
-              triggerMode: TooltipTriggerMode.tap,
-              child: Padding(
-                padding: const EdgeInsets.all(3),
-                child: Icon(Icons.info_outline, size: 17, color: cores.primary),
-              ),
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final semantica = CoresSemanticas.de(context);
+    final saldoPrevisto = receber - pagar;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: cores.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(RaioBorda.cartao),
+        border: Border.all(
+          color: cores.outlineVariant.withValues(alpha: 0.65),
         ),
-        const SizedBox(height: 4),
-        LayoutBuilder(
-          builder: (context, limites) {
-            final empilhar =
-                limites.maxWidth < 265 ||
-                MediaQuery.textScalerOf(context).scale(12) > 17;
-            final itens = [
-              (
-                'Receitas previstas',
-                receber,
-                Icons.north_east,
-                _verdeCalendario,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Resumo do mês',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
               ),
-              (
-                'Despesas previstas',
-                pagar,
-                Icons.south_east,
-                _vermelhoCalendario,
+              Tooltip(
+                message:
+                    'Inclui compromissos pagos e em aberto; exclui cancelados. '
+                    'Previsões só alteram o saldo real após confirmação.',
+                triggerMode: TooltipTriggerMode.tap,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 17,
+                    color: cores.primary,
+                  ),
+                ),
               ),
-              (
-                'Saldo previsto',
-                receber - pagar,
-                Icons.account_balance_wallet_outlined,
-                cores.primary,
-              ),
-            ];
-            Widget bloco((String, int, IconData, Color) item) => Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: cores.surfaceContainerHighest.withValues(alpha: .7),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: empilhar
-                  ? Row(
-                      children: [
-                        Icon(item.$3, size: 18, color: item.$4),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: Text(
-                            item.$1,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            dinheiroAgenda(item.$2),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: item.$4,
+            ],
+          ),
+          const SizedBox(height: 6),
+          LayoutBuilder(
+            builder: (context, limites) {
+              final empilhar =
+                  limites.maxWidth < 265 ||
+                  MediaQuery.textScalerOf(context).scale(12) > 17;
+              final itens = [
+                (
+                  'Receitas previstas',
+                  receber,
+                  Icons.north_east,
+                  semantica.receita,
+                ),
+                (
+                  'Despesas previstas',
+                  pagar,
+                  Icons.south_east,
+                  semantica.despesa,
+                ),
+                (
+                  'Saldo previsto',
+                  saldoPrevisto,
+                  Icons.account_balance_wallet_outlined,
+                  saldoPrevisto < 0 ? semantica.despesa : cores.primary,
+                ),
+              ];
+              Widget bloco((String, int, IconData, Color) item) => Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: cores.surface,
+                  borderRadius: BorderRadius.circular(RaioBorda.sm),
+                  border: Border.all(
+                    color: cores.outlineVariant.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: empilhar
+                    ? Row(
+                        children: [
+                          Icon(item.$3, size: 18, color: item.$4),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              item.$1,
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          height: 24,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(item.$3, size: 17, color: item.$4),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  item.$1,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    height: 1.1,
-                                    color: cores.onSurfaceVariant,
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              dinheiroAgenda(item.$2),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: item.$4,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            height: 24,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(item.$3, size: 16, color: item.$4),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  child: Text(
+                                    item.$1,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      height: 1.1,
+                                      color: cores.onSurfaceVariant,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            dinheiroAgenda(item.$2),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: item.$4,
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-            );
-            if (empilhar) {
-              return Column(
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              dinheiroAgenda(item.$2),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: item.$4,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+              );
+              if (empilhar) {
+                return Column(
+                  children: [
+                    for (final item in itens)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: bloco(item),
+                      ),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final item in itens)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: bloco(item),
-                    ),
+                  for (var i = 0; i < itens.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    Expanded(child: bloco(itens[i])),
+                  ],
                 ],
               );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < itens.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 5),
-                  Expanded(child: bloco(itens[i])),
-                ],
-              ],
-            );
-          },
-        ),
-      ],
-    ),
-  );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _IconeCategoriaCalendario extends StatelessWidget {
@@ -202,19 +218,19 @@ class _IconeCategoriaCalendario extends StatelessWidget {
   final double tamanho;
   @override
   Widget build(BuildContext context) {
+    final semantica = CoresSemanticas.de(context);
     final cor =
-        categoria?.cor ??
-        (item.receita ? _verdeCalendario : const Color(0xFFA78BFA));
+        categoria?.cor ?? (item.receita ? semantica.receita : semantica.despesa);
     return Container(
       width: tamanho,
       height: tamanho,
       decoration: BoxDecoration(
-        color: cor.withValues(alpha: .2),
+        color: cor.withValues(alpha: .16),
         borderRadius: BorderRadius.circular(11),
       ),
       child: Icon(
         categoria?.icone ?? Icons.category_outlined,
-        size: tamanho * .6,
+        size: tamanho * .58,
         color: cor,
       ),
     );
@@ -227,25 +243,32 @@ class _StatusCalendario extends StatelessWidget {
   final bool resumo;
   @override
   Widget build(BuildContext context) {
-    final cor = item.pendente
-        ? const Color(0xFFFFD861)
+    final semantica = CoresSemanticas.de(context);
+    final esquema = Theme.of(context).colorScheme;
+    final hoje = diaAgenda(DateTime.now());
+    final vencido = item.pendente && item.data.isBefore(hoje);
+    final (Color fundo, Color texto) = vencido && !resumo
+        ? (semantica.despesaFundo, semantica.despesa)
+        : item.pendente
+        ? (semantica.alertaFundo, semantica.alerta)
         : item.status == 'realizado'
-        ? const Color(0xFFA78BFA)
-        : const Color(0xFFBAC0CF);
+        ? (semantica.receitaFundo, semantica.receita)
+        : (esquema.surfaceContainerHighest, esquema.onSurfaceVariant);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
       decoration: BoxDecoration(
-        color: cor,
+        color: fundo,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: texto.withValues(alpha: 0.24)),
       ),
       child: Text(
         resumo && item.pendente
             ? 'Pendente'
             : item.rotuloStatus(DateTime.now()),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF14151B),
+          color: texto,
         ),
       ),
     );
@@ -268,155 +291,175 @@ class _CompromissoDiaCalendario extends StatelessWidget {
   final VoidCallback onDetalhes;
   final VoidCallback? onRealizar;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Material(
-      color: cores.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onDetalhes,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 4, 2),
-          child: LayoutBuilder(
-            builder: (context, limites) {
-              final ampliado =
-                  MediaQuery.textScalerOf(context).scale(12) > 17 ||
-                  limites.maxWidth < 280;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      _IconeCategoriaCalendario(
-                        item: item,
-                        categoria: categoria,
-                      ),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item.titulo,
-                                    maxLines: ampliado ? 2 : 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) {
+    final semantica = CoresSemanticas.de(context);
+    final corValor = item.receita ? semantica.receita : cores.onSurface;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: cores.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(RaioBorda.md),
+          side: BorderSide(
+            color: cores.outlineVariant.withValues(alpha: 0.55),
+          ),
+        ),
+        child: InkWell(
+          onTap: onDetalhes,
+          borderRadius: BorderRadius.circular(RaioBorda.md),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+            child: LayoutBuilder(
+              builder: (context, limites) {
+                final ampliado =
+                    MediaQuery.textScalerOf(context).scale(12) > 17 ||
+                    limites.maxWidth < 280;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        _IconeCategoriaCalendario(
+                          item: item,
+                          categoria: categoria,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.titulo,
+                                      maxLines: ampliado ? 2 : 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                if (!ampliado) ...[
-                                  const SizedBox(width: 6),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 115,
-                                    ),
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        dinheiroAgenda(item.centavos),
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
+                                  if (!ampliado) ...[
+                                    const SizedBox(width: 6),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 118,
+                                      ),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          dinheiroAgenda(item.centavos),
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: corValor,
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              '${item.categoria} • ${item.receita ? 'Receita' : 'Despesa'}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: cores.onSurfaceVariant,
                               ),
-                            ),
-                            if (ampliado)
+                              const SizedBox(height: 3),
                               Text(
-                                dinheiroAgenda(item.centavos),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
+                                '${item.categoria} • ${item.receita ? 'Receita' : 'Despesa'}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: cores.onSurfaceVariant,
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(width: 32, height: 34, child: menu),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Wrap(
-                          spacing: 7,
-                          runSpacing: 3,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            _StatusCalendario(item: item),
-                            if (item.frequencia != 'unica')
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.repeat,
-                                    size: 11,
-                                    color: cores.onSurfaceVariant,
+                              if (ampliado)
+                                Text(
+                                  dinheiroAgenda(item.centavos),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: corValor,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
                                   ),
-                                  const SizedBox(width: 3),
-                                  Flexible(
-                                    child: Text(
-                                      item.rotuloFrequencia,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: cores.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
-                      if (item.pendente) ...[
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: TextButton(
-                            onPressed: onRealizar,
-                            style: TextButton.styleFrom(
-                              minimumSize: const Size(0, 28),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: Text(
-                              item.receita ? 'Marcar recebido' : 'Marcar pago',
-                              style: const TextStyle(fontSize: 11),
-                            ),
+                                ),
+                            ],
                           ),
                         ),
+                        SizedBox(width: 32, height: 34, child: menu),
                       ],
-                    ],
-                  ),
-                ],
-              );
-            },
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Wrap(
+                            spacing: 7,
+                            runSpacing: 3,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _StatusCalendario(item: item),
+                              if (item.frequencia != 'unica')
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.repeat,
+                                      size: 11,
+                                      color: cores.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Flexible(
+                                      child: Text(
+                                        item.rotuloFrequencia,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: cores.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (item.pendente) ...[
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: TextButton(
+                              onPressed: onRealizar,
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(0, 28),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text(
+                                item.receita ? 'Marcar recebido' : 'Marcar pago',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _VencimentoCalendario extends StatelessWidget {
@@ -432,6 +475,8 @@ class _VencimentoCalendario extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
+    final semantica = CoresSemanticas.de(context);
+    final corValor = item.receita ? semantica.receita : cores.onSurface;
     const meses = [
       'jan',
       'fev',
@@ -449,7 +494,7 @@ class _VencimentoCalendario extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
@@ -465,12 +510,14 @@ class _VencimentoCalendario extends StatelessWidget {
             return Row(
               children: [
                 SizedBox(
-                  width: ampliado ? 45 : 37,
+                  width: ampliado ? 45 : 38,
                   child: Text(
                     '${item.data.day.toString().padLeft(2, '0')} ${meses[item.data.month - 1]}',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
                       color: cores.onSurfaceVariant,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                 ),
@@ -507,9 +554,13 @@ class _VencimentoCalendario extends StatelessWidget {
                       if (ampliado)
                         Text(
                           dinheiroAgenda(item.centavos),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
+                            color: corValor,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures(),
+                            ],
                           ),
                         ),
                     ],
@@ -527,9 +578,13 @@ class _VencimentoCalendario extends StatelessWidget {
                             fit: BoxFit.scaleDown,
                             child: Text(
                               dinheiroAgenda(item.centavos),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
+                                color: corValor,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                             ),
                           ),
