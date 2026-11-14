@@ -45,6 +45,9 @@ class ContasBanco {
   ContasBanco(this.database);
   final Future<Database> database;
 
+  static String normalizarNome(String nome) =>
+      nome.trim().replaceAll(RegExp(r'\s+'), ' ');
+
   static Future<void> migrar(DatabaseExecutor db) async {
     await db.execute(
       'CREATE TABLE IF NOT EXISTS bancos (codigo TEXT PRIMARY KEY, nome TEXT NOT NULL)',
@@ -218,9 +221,9 @@ class ContasBanco {
     """
       SELECT b.codigo, COALESCE(b.nome, 'Origem não identificada') AS banco_nome,
         COUNT(*) AS quantidade,
-        SUM(CASE WHEN m.tipo = 'receita' THEN m.valor ELSE 0 END) AS entradas,
-        SUM(CASE WHEN m.tipo = 'despesa' THEN m.valor ELSE 0 END) AS saidas,
-        SUM(m.valor) AS volume
+        SUM(CASE WHEN m.tipo = 'receita' THEN CAST(ROUND(m.valor * 100) AS INTEGER) ELSE 0 END) / 100.0 AS entradas,
+        SUM(CASE WHEN m.tipo = 'despesa' THEN CAST(ROUND(m.valor * 100) AS INTEGER) ELSE 0 END) / 100.0 AS saidas,
+        SUM(CAST(ROUND(m.valor * 100) AS INTEGER)) / 100.0 AS volume
       FROM movimentacoes m LEFT JOIN contas c ON c.id = m.conta_id
       LEFT JOIN bancos b ON b.codigo = c.banco_codigo
       WHERE m.ativa = 1 AND m.data >= ? AND m.data < ?
@@ -315,11 +318,24 @@ class ContasBanco {
 
     // Só comparamos com movimentações existentes quando
     // sabemos exatamente qual é a conta.
-    if (contaId != null) {
+    if (contaId != null && itens.isNotEmpty) {
+      var minData = itens.first.data;
+      var maxData = itens.first.data;
+      for (final item in itens) {
+        if (item.data.isBefore(minData)) minData = item.data;
+        if (item.data.isAfter(maxData)) maxData = item.data;
+      }
+      final inicio = DateTime(minData.year, minData.month, minData.day)
+          .toIso8601String()
+          .split('T')
+          .first;
+      final fim = DateTime(maxData.year, maxData.month, maxData.day + 1)
+          .toIso8601String();
       existentes = await db.query(
         'movimentacoes',
-        where: 'conta_id = ?',
-        whereArgs: [contaId],
+        columns: ['data', 'valor', 'tipo', 'descricao'],
+        where: 'conta_id = ? AND data >= ? AND data < ?',
+        whereArgs: [contaId, inicio, fim],
       );
     }
 
@@ -410,4 +426,23 @@ class ContasBanco {
     });
   }
 }
+
+String mensagemErroSegura(
+  Object erro, [
+  String padrao = 'Não foi possível concluir a operação.',
+]) {
+  if (erro is FormatException && erro.message.trim().isNotEmpty) {
+    return erro.message;
+  }
+  if (erro is ArgumentError &&
+      erro.message != null &&
+      erro.message.toString().trim().isNotEmpty) {
+    return erro.message.toString();
+  }
+  if (erro is StateError && erro.message.trim().isNotEmpty) {
+    return erro.message;
+  }
+  return padrao;
+}
+
 

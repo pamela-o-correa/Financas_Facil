@@ -161,12 +161,77 @@ Future<void> verificarRegressoesPersistencia(BancoDados banco) async {
     tipo: 'despesa',
     centavos: 1234,
     categoria: 'Outros',
+    conta: destino.nome,
     data: DateTime(2026, 9, 28),
     frequencia: 'mensal',
     quantidade: 3,
     lembrete: 0,
     hora: 8,
     minuto: 0,
+  );
+  await expectLater(
+    banco.atualizarCategoria(
+      antiga: outra,
+      atualizada: Categoria(
+        id: outra.id,
+        nome: outra.nome,
+        tipo: TipoMovimentacao.receita,
+        codigoIcone: outra.codigoIcone,
+        codigoCor: outra.codigoCor,
+        padrao: outra.padrao,
+      ),
+    ),
+    throwsStateError,
+  );
+  await banco.atualizarCategoria(
+    antiga: outra,
+    atualizada: Categoria(
+      id: outra.id,
+      nome: 'Outros Renomeado',
+      tipo: outra.tipo,
+      codigoIcone: outra.codigoIcone,
+      codigoCor: outra.codigoCor,
+      padrao: outra.padrao,
+    ),
+  );
+  expect(
+    (await db.query(
+      'agenda',
+      where: 'categoria = ? AND titulo = ?',
+      whereArgs: ['Outros Renomeado', 'Regressão agenda'],
+    )).length,
+    3,
+  );
+  await banco.atualizarCategoria(
+    antiga: Categoria(
+      id: outra.id,
+      nome: 'Outros Renomeado',
+      tipo: outra.tipo,
+      codigoIcone: outra.codigoIcone,
+      codigoCor: outra.codigoCor,
+      padrao: outra.padrao,
+    ),
+    atualizada: outra,
+  );
+  final primeiroCompromisso = (await AgendaBanco(Future.value(db)).listar())
+      .firstWhere((c) => c.titulo == 'Regressão agenda');
+  await AgendaBanco(Future.value(db)).realizar(
+    primeiroCompromisso,
+    DateTime(2026, 9, 28),
+  );
+  final movId = (await db.query(
+    'agenda',
+    where: 'id = ?',
+    whereArgs: [primeiroCompromisso.id],
+  )).single['movimentacao_id'] as int?;
+  expect(movId, isNotNull);
+  expect(
+    (await db.query(
+      'movimentacoes',
+      where: 'id = ?',
+      whereArgs: [movId],
+    )).single['conta_id'],
+    destino.id,
   );
   await banco.restaurarAplicativo();
   for (final tabela in [

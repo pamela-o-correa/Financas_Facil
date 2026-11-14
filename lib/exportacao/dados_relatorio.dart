@@ -1,3 +1,4 @@
+import '../importacao/validacao.dart';
 import '../modelos/contabilizacao.dart';
 
 String dataIso(DateTime d) =>
@@ -68,7 +69,11 @@ class LinhaRelatorio {
       throw const FormatException('Valor financeiro inválido.');
     }
     centavos = prevista ? valor.round() : (valor * 100).round();
-    data = DateTime.parse(dados['data'] as String);
+    final textoData = (dados['data'] ?? '').toString();
+    data =
+        DateTime.tryParse(textoData) ??
+        dataCsv(textoData) ??
+        (throw const FormatException('Data inválida no registro.'));
   }
   final String perfil;
   final Map<String, Object?> dados;

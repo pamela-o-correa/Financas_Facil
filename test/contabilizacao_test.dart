@@ -20,6 +20,11 @@ void main() {
     final antigo = item.toMap()..remove('ativa');
     expect(Movimentacao.fromMap(antigo).ativa, true);
     expect(item.copyWith(ativa: false).contabilizavel, false);
+    final m1 = item.copyWith(valor: 0.1);
+    final m2 = item.copyWith(id: 2, valor: 0.2);
+    expect(m1.centavos + m2.centavos, 30);
+    expect(totaisCategorias([m1, m2]).single.value, 0.3);
+    expect(agruparDespesas([m1, m2], const [], AgrupamentoDespesa.categoria).single.total, 0.3);
   });
 
   testWidgets('Menu permite desativar e reativar sem remover o cartão', (tester) async {

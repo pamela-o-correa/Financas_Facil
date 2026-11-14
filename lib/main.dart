@@ -311,6 +311,7 @@ class Movimentacao {
   /// Nulo para movimentações criadas manualmente.
   final int? importacaoId;
   final bool ativa;
+  int get centavos => (valor * 100).round();
   bool get contabilizavel => deveContabilizar(ativa: ativa, transferencia: transferencia);
   final int? transferenciaPar;
   bool get transferencia => transferenciaPar != null;
@@ -643,9 +644,13 @@ Future<void> _carregarCategoriasBanco() async {
   }
 
   Future<ResultadoArquivoImportado?> _processarArquivo(PlatformFile arquivo, ContaOrigem conta, BancoDados bancoAtual) async {
-
-
-      final conteudo = MotorImportacao.decodificar(await arquivo.readAsBytes());
+      final bytes = await arquivo.readAsBytes();
+      if (bytes.length > 10 * 1024 * 1024) {
+        throw const FormatException(
+          'O arquivo selecionado excede o limite de 10 MB.',
+        );
+      }
+      final conteudo = MotorImportacao.decodificar(bytes);
       final categorias = await bancoAtual.nomesCategoriasCsv();
       final contas = ContasBanco(bancoAtual.database);
       var resultado = MotorImportacao.ler(conteudo, categorias);
@@ -1261,31 +1266,35 @@ Future<void> _carregarCategoriasBanco() async {
   // CÁLCULOS
   // ==========================================================
 
-  double get _receitas {
+  int get _receitasCentavos {
     return _movimentacoesFinanceirasPeriodo
         .where(
           (item) =>
               item.tipo == TipoMovimentacao.receita,
         )
-        .fold(
-          0.0,
-          (total, item) => total + item.valor,
+        .fold<int>(
+          0,
+          (total, item) => total + item.centavos,
         );
   }
 
-  double get _despesas {
+  int get _despesasCentavos {
     return _movimentacoesFinanceirasPeriodo
         .where(
           (item) =>
               item.tipo == TipoMovimentacao.despesa,
         )
-        .fold(
-          0.0,
-          (total, item) => total + item.valor,
+        .fold<int>(
+          0,
+          (total, item) => total + item.centavos,
         );
   }
 
-  double get _saldo => _receitas - _despesas;
+  double get _receitas => _receitasCentavos / 100;
+
+  double get _despesas => _despesasCentavos / 100;
+
+  double get _saldo => (_receitasCentavos - _despesasCentavos) / 100;
 
   String _dinheiro(double valor) {
     final negativo = valor < 0;
@@ -1736,10 +1745,13 @@ body: Stack(
     final hoje = diaAgenda(DateTime.now());
     final fim = DateTime(hoje.year, hoje.month, hoje.day + 7);
     final previstos = _previsoesHome.where((p) => p.pendente && !p.data.isBefore(hoje) && p.data.isBefore(fim)).toList();
-    final entradas = previstos.where((p) => p.receita).fold(0, (s, p) => s + p.centavos) / 100;
-    final saidas = previstos.where((p) => !p.receita).fold(0, (s, p) => s + p.centavos) / 100;
-    final atual = _movimentacoes.where((m) => m.ativa).where((m) => m.data.isBefore(DateTime(hoje.year, hoje.month, hoje.day + 1)))
-      .fold(0.0, (s, m) => s + (m.tipo == TipoMovimentacao.receita ? m.valor : -m.valor));
+    final entradasCentavos = previstos.where((p) => p.receita).fold<int>(0, (s, p) => s + p.centavos);
+    final saidasCentavos = previstos.where((p) => !p.receita).fold<int>(0, (s, p) => s + p.centavos);
+    final entradas = entradasCentavos / 100;
+    final saidas = saidasCentavos / 100;
+    final atualCentavos = _movimentacoes
+        .where((m) => m.contabilizavel && m.data.isBefore(DateTime(hoje.year, hoje.month, hoje.day + 1)))
+        .fold<int>(0, (s, m) => s + (m.tipo == TipoMovimentacao.receita ? m.centavos : -m.centavos));
     final dica = _despesas > _receitas
       ? 'As despesas superaram as receitas neste período em ${_dinheiro(_despesas - _receitas)}. Revise os gastos antes de assumir novos compromissos.'
       : categorias.isNotEmpty && _despesas > 0
@@ -1764,7 +1776,7 @@ body: Stack(
           linha('Previsto para entrar', entradas, Colors.green),
           linha('Previsto para sair', saidas, Colors.red),
           const Divider(),
-          linha('Saldo projetado', atual + entradas - saidas, Theme.of(context).colorScheme.primary),
+          linha('Saldo projetado', (atualCentavos + entradasCentavos - saidasCentavos) / 100, Theme.of(context).colorScheme.primary),
           const Text('Saldo dos lançamentos até hoje + previsões pendentes. Independente do período selecionado.', style: TextStyle(fontSize: 12)),
         ])),
       const SizedBox(height: 16),
@@ -2231,11 +2243,11 @@ body: Stack(
       if (item.tipo == TipoMovimentacao.receita) {
         mapa[chave]!['receitas'] =
             mapa[chave]!['receitas']! +
-            item.valor;
+            item.centavos;
       } else {
         mapa[chave]!['despesas'] =
             mapa[chave]!['despesas']! +
-            item.valor;
+            item.centavos;
       }
     }
 
@@ -2245,8 +2257,8 @@ body: Stack(
       return ResumoMes(
         ano: int.parse(partes[0]),
         mes: int.parse(partes[1]),
-        receitas: entry.value['receitas']!,
-        despesas: entry.value['despesas']!,
+        receitas: entry.value['receitas']! / 100,
+        despesas: entry.value['despesas']! / 100,
       );
     }).toList();
 
@@ -2637,16 +2649,18 @@ body: Stack(
     final anos = {DateTime.now().year, _anoAnalise,
       ..._movimentacoes.map((m) => m.data.year)}.toList()
       ..sort((a, b) => b.compareTo(a));
-    final receitas = List<double>.filled(12, 0);
-    final despesas = List<double>.filled(12, 0);
+    final receitasCentavos = List<int>.filled(12, 0);
+    final despesasCentavos = List<int>.filled(12, 0);
     final registros = List<int>.filled(12, 0);
     for (final m in _movimentacoes.where((m) => m.contabilizavel && m.data.year == _anoAnalise)) {
       final i = m.data.month - 1;
       registros[i]++;
-      if (m.tipo == TipoMovimentacao.receita) { receitas[i] += m.valor; }
-      else { despesas[i] += m.valor; }
+      if (m.tipo == TipoMovimentacao.receita) { receitasCentavos[i] += m.centavos; }
+      else { despesasCentavos[i] += m.centavos; }
     }
-    final saldos = List<double>.generate(12, (i) => receitas[i] - despesas[i]);
+    final receitas = List<double>.generate(12, (i) => receitasCentavos[i] / 100);
+    final despesas = List<double>.generate(12, (i) => despesasCentavos[i] / 100);
+    final saldos = List<double>.generate(12, (i) => (receitasCentavos[i] - despesasCentavos[i]) / 100);
     final valores = [despesas, receitas, saldos][_rankingAnual];
     final ranking = List<int>.generate(12, (i) => i)
         .where((i) => registros[i] > 0).toList()
@@ -2655,7 +2669,7 @@ body: Stack(
         return ordem == 0 ? a.compareTo(b) : ordem;
       });
     final maximo = [...receitas, ...despesas].fold(0.0, math.max);
-    double soma(List<double> itens) => itens.fold(0.0, (a, b) => a + b);
+    double soma(List<double> itens) => itens.fold<int>(0, (a, b) => a + (b * 100).round()) / 100;
     Widget resumo(String titulo, double valor, Color destaque) => Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -3117,7 +3131,7 @@ _categoria =
 
     _data =
         item?.data ??
-        DateTime.now();
+        DateUtils.dateOnly(DateTime.now());
 
     _valorController =
         TextEditingController(
@@ -6190,7 +6204,27 @@ class TelaConfiguracoes extends StatelessWidget {
             icone: Icons.info_outline,
             titulo: 'Sobre o Finanças Fácil',
             subtitulo: 'Informações sobre o aplicativo',
-            onTap: () {},
+            onTap: () {
+              showDialog<void>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('Finanças Fácil'),
+                  content: const Text(
+                    'Aplicativo para controle pessoal e profissional de receitas, '
+                    'despesas, contas bancárias, importação de extratos CSV e '
+                    'planejamento financeiro.\n\n'
+                    'Seus dados financeiros permanecem armazenados localmente '
+                    'no seu dispositivo.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('Fechar'),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -6703,15 +6737,17 @@ void initState() {
     if (!mounted) return;
 
     Navigator.pop(context, true);
-  } catch (_) {
+  } catch (e) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          _editando
-              ? 'Não foi possível salvar. Já pode existir uma categoria com esse nome e tipo.'
-              : 'Já existe uma categoria com esse nome e tipo.',
+          e is StateError
+              ? e.message
+              : _editando
+                  ? 'Não foi possível salvar. Já pode existir uma categoria com esse nome e tipo.'
+                  : 'Já existe uma categoria com esse nome e tipo.',
         ),
       ),
     );
@@ -6775,11 +6811,13 @@ void initState() {
               ),
             ],
             selected: {_tipo},
-            onSelectionChanged: (selecionados) {
-              setState(() {
-                _tipo = selecionados.first;
-              });
-            },
+            onSelectionChanged: widget.categoria?.padrao == true
+                ? null
+                : (selecionados) {
+                    setState(() {
+                      _tipo = selecionados.first;
+                    });
+                  },
           ),
 
           const SizedBox(height: 24),
@@ -7125,91 +7163,8 @@ class LembretesAgenda {
     String nome,
     List<Previsto> itens,
   ) async {
-    if (!suportado) return;
-    await _canal.invokeMethod<void>('sincronizar', {
-      'perfil': '$perfil',
-      'itens': [
-        for (final item in itens.where((i) => i.pendente && i.lembrete != null))
-          {
-            'id': item.id,
-            'titulo': '${item.receita ? 'A receber' : 'A pagar'} • $nome',
-            'texto': '${item.titulo} • vence em ${dataAgendaBR(item.data)}',
-            'data': dataAgenda(
-              DateTime(
-                item.data.year,
-                item.data.month,
-                item.data.day - item.lembrete!,
-              ),
-            ),
-            'hora': item.hora,
-            'minuto': item.minuto,
-          },
-      ],
-    });
+    await atualizarAgendamentos();
   }
-}
-
-
-
-
-String celulaCsv(Object? valor, {bool texto = true}) {
-  var s = valor?.toString() ?? '';
-  if (texto && RegExp(r'^\s*[=+@\-\t\r\n]').hasMatch(s)) s = "'$s";
-  return '"${s.replaceAll('"', '""')}"';
-}
-
-String gerarCsvAgenda(
-  String perfil,
-  List<Map<String, Object?>> realizados,
-  List<Map<String, Object?>> previstos,
-) {
-  final linhas = <String>[
-    [
-      'Perfil',
-      'Origem',
-      'Tipo',
-      'Descrição',
-      'Categoria',
-      'Data',
-      'Valor (R\$)',
-      'Status',
-      'Conta',
-      'Observações',
-    ].map(celulaCsv).join(';'),
-  ];
-  void linha(Map<String, Object?> m, bool previsto) {
-    final valor = previsto ? (m['centavos'] as num) / 100 : (m['valor'] as num);
-    final data = DateTime.parse(m['data'] as String);
-    final status = previsto
-        ? {
-            'pendente': 'Pendente',
-            'realizado': 'Realizado',
-            'cancelado': 'Cancelado',
-          }[m['status']]!
-        : 'Realizado';
-    linhas.add(
-      [
-        celulaCsv(perfil),
-        celulaCsv(previsto ? 'Previsão' : 'Movimentação'),
-        celulaCsv(m['tipo'] == 'receita' ? 'Receita' : 'Despesa'),
-        celulaCsv(m[previsto ? 'titulo' : 'descricao']),
-        celulaCsv(m['categoria']),
-        celulaCsv(dataAgendaBR(data)),
-        celulaCsv(valor.toStringAsFixed(2).replaceAll('.', ','), texto: false),
-        celulaCsv(status),
-        celulaCsv(m['conta']),
-        celulaCsv(m['observacoes']),
-      ].join(';'),
-    );
-  }
-
-  for (final m in realizados) {
-    linha(m, false);
-  }
-  for (final m in previstos) {
-    linha(m, true);
-  }
-  return '\uFEFF${linhas.join('\r\n')}\r\n';
 }
 
 
@@ -7631,6 +7586,18 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
         .length;
     final deslocamento = _mes.weekday % 7;
     final dias = DateTime(_mes.year, _mes.month + 1, 0).day;
+    final eventosPorDia = <DateTime, List<Previsto>>{};
+    for (final item in noMes) {
+      if (item.status != 'cancelado') {
+        (eventosPorDia[item.data] ??= []).add(item);
+      }
+    }
+    final reaisPorDia = <DateTime, List<Movimentacao>>{};
+    for (final m in widget.movimentacoes) {
+      if (m.data.year == _mes.year && m.data.month == _mes.month) {
+        (reaisPorDia[diaAgenda(m.data)] ??= []).add(m);
+      }
+    }
     return Theme(
       data: Theme.of(context).copyWith(colorScheme: cor, visualDensity: VisualDensity.compact),
       child: ColoredBox(color: cor.surface, child: RefreshIndicator(
@@ -7698,13 +7665,11 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
                   style: TextStyle(fontSize: 12, color: cor.onSurfaceVariant.withValues(alpha: .35))));
               }
               final data = DateTime(_mes.year, _mes.month, numero);
-              final eventos = noMes.where(
-                (i) => i.data == data && i.status != 'cancelado',
-              );
-              final reais = widget.movimentacoes.where((m) => diaAgenda(m.data) == data);
+              final eventos = eventosPorDia[data] ?? const <Previsto>[];
+              final reais = reaisPorDia[data] ?? const <Movimentacao>[];
               final selecionado = _dia == data;
               return Semantics(
-                label: '${dataAgendaBR(data)}, ${eventos.length} previsões',
+                label: '${dataAgendaBR(data)}, ${eventos.length} previsões${reais.isEmpty ? '' : ', ${reais.length} movimentações'}',
                 selected: selecionado,
                 button: true,
                 child: InkWell(
@@ -8365,12 +8330,31 @@ class AgendaBanco {
       );
       if (linhas.isEmpty) return false;
       final atual = Previsto.mapa(linhas.single);
+      int? contaId;
+      final nomeConta = ContasBanco.normalizarNome(atual.conta);
+      if (nomeConta.isNotEmpty) {
+        final possuiContas = await txn.rawQuery(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'contas'",
+        );
+        if (possuiContas.isNotEmpty) {
+          final contas = await txn.query(
+            'contas',
+            columns: ['id'],
+            where: 'LOWER(nome) = ?',
+            whereArgs: [nomeConta.toLowerCase()],
+          );
+          if (contas.length == 1) {
+            contaId = contas.single['id'] as int?;
+          }
+        }
+      }
       final id = await txn.insert('movimentacoes', {
         'tipo': atual.tipo,
         'valor': atual.centavos / 100,
         'categoria': atual.categoria,
         'descricao': atual.titulo,
         'conta': atual.conta,
+        'conta_id': ?contaId,
         'observacoes': atual.observacoes,
         'data': diaAgenda(dataRealizada).toIso8601String(),
       });

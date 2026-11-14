@@ -136,6 +136,16 @@ int? colunaCsv(List<String> cabecalho, List<String> nomes) {
   return encontrados.length == 1 ? encontrados.single : null;
 }
 
+int? _colunaPrioritariaCsv(List<String> cabecalho, List<String> nomes) {
+  final unica = colunaCsv(cabecalho, nomes);
+  if (unica != null) return unica;
+  for (final nome in nomes) {
+    final indice = colunaCsv(cabecalho, [nome]);
+    if (indice != null) return indice;
+  }
+  return null;
+}
+
 class DocumentoCsv {
   const DocumentoCsv(this.linhas, this.separador, this.sugestao);
   final List<LinhaCsv> linhas;
@@ -164,7 +174,14 @@ class DocumentoCsv {
         final data = colunaCsv(c, aliasesData);
         final descricao =
             colunaCsv(c, ['descricao', 'description']) ??
-            colunaCsv(c, aliasesDescricao);
+            _colunaPrioritariaCsv(c, const [
+              'lancamento',
+              'titulo',
+              'title',
+              'estabelecimento',
+              'historico',
+              'memo',
+            ]);
         final valor = colunaCsv(c, aliasesValor);
         final debito = colunaCsv(c, ['debito', 'debitos', 'saida', 'saidas']);
         final credito = colunaCsv(c, [

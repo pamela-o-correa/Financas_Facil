@@ -39,7 +39,7 @@ class _TelaLixeiraState extends State<TelaLixeira> {
     if (_ocupado || !mounted) return;
     setState(() { _ocupado = true; });
     try { await acao(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Não foi possível concluir: $e'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemErroSegura(e)))); }
     finally { if (mounted) { setState(() { _ocupado = false; }); _recarregar(); } }
   }
   String _data(Object? valor) { final d = DateTime.parse(valor as String).toLocal(); return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}'; }

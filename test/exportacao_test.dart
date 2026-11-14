@@ -35,14 +35,16 @@ void main(){
     expect(texto.startsWith('"Perfil";"Origem"'),isTrue);
     expect(texto,contains('"\'=1+2"'));expect(texto,contains('"120,00"'));expect(texto,contains('Desativada'));expect(texto,contains('Previsão'));expect(texto,contains('acentuação'));expect(texto,contains('Dados originais'));
   });
-  test('Excel contém resumo, datas numéricas, moeda e dados detalhados',(){
-    final bytes=gerarExcel(relatorio([exemplo(),exemplo(tipo:'receita',valor:1000)]));
+  test('Excel contém resumo, datas numéricas, moeda, neutraliza fórmulas e aceita data dd/MM/yyyy',(){
+    final d=relatorio([exemplo(descricao:'=1+2'),exemplo(tipo:'receita',valor:1000),LinhaRelatorio(perfil:'Pessoal',prevista:false,dados:{'id':99,'tipo':'despesa','valor':50.0,'centavos':5000,'descricao':'Data BR','categoria':'Outros','data':'15/09/2026','ativa':1})]);
+    final bytes=gerarExcel(d);
     final livro=Excel.decodeBytes(bytes);
     expect(livro.tables.keys,containsAll(['Resumo','Movimentações','Evolução']));
-    expect(livro['Movimentações'].maxRows,3);
+    expect(livro['Movimentações'].maxRows,4);
+    expect(livro['Movimentações'].cell(CellIndex.indexByString('D2')).value.toString(),"'=1+2");
     expect(livro['Movimentações'].cell(CellIndex.indexByString('F2')).value,isA<DateCellValue>());
     expect(livro['Movimentações'].cell(CellIndex.indexByString('G2')).value.toString(),'120');
-    expect(livro['Resumo'].cell(CellIndex.indexByString('B7')).value.toString(),'880');
+    expect(livro['Resumo'].cell(CellIndex.indexByString('B7')).value.toString(),'830');
   });
   test('PDF gera resumo e pagina 650 registros, inclusive descrição longa',()async{
     final regular=await File('assets/fontes/Roboto-Regular.ttf').readAsBytes();

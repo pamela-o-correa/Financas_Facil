@@ -64,6 +64,34 @@ class AdaptadorInter extends AdaptadorExtrato {
   });
 }
 
+class AdaptadorNubank extends AdaptadorExtrato {
+  const AdaptadorNubank();
+  @override
+  String get codigo => '260';
+  @override
+  String get nome => 'Nubank';
+  @override
+  bool reconhece(Set<String> c) =>
+      (!c.contains('codtransacao') &&
+          c.containsAll({'data', 'valor', 'identificador', 'descricao'})) ||
+      c.containsAll({'date', 'category', 'title', 'amount'}) ||
+      c.containsAll({'data', 'categoria', 'titulo', 'valor'});
+}
+
+class AdaptadorItau extends AdaptadorExtrato {
+  const AdaptadorItau();
+  @override
+  String get codigo => '341';
+  @override
+  String get nome => 'Itaú';
+  @override
+  bool reconhece(Set<String> c) =>
+      c.containsAll({'data', 'lancamento', 'ag origem', 'valor r'}) ||
+      (!c.contains('detalhes') &&
+          !c.contains('historico') &&
+          c.containsAll({'data', 'lancamento', 'valor', 'saldo'}));
+}
+
 class AdaptadorGenerico extends AdaptadorExtrato {
   const AdaptadorGenerico();
   @override
@@ -80,6 +108,8 @@ AdaptadorExtrato detectarBanco(List<String> cabecalho) {
     AdaptadorBancoBrasil(),
     AdaptadorSicredi(),
     AdaptadorInter(),
+    AdaptadorNubank(),
+    AdaptadorItau(),
     AdaptadorGenerico(),
   ].firstWhere((a) => a.reconhece(c));
 }

@@ -310,9 +310,13 @@ class BancoDados {
     return openDatabase(
       caminhoCompleto,
       version: 14,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onOpen: (db) async {
         await LixeiraBanco.migrar(db);
         await LixeiraBanco.purgar(db);
+        await _criarIndicesDesempenho(db);
       },
       onCreate: (db, version) async {
         await AgendaBanco.criar(db);
@@ -337,6 +341,8 @@ class BancoDados {
         await AgendaBanco.migrarPlanejamento(db);
         await ContasBanco.migrar(db);
         await OperacoesFinanceiras.migrar(db);
+        await LixeiraBanco.migrar(db);
+        await _criarIndicesDesempenho(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 8 && oldVersion >= 7) {
@@ -416,7 +422,23 @@ class BancoDados {
             );
           }
         }
+        if (oldVersion < 14) {
+          await LixeiraBanco.migrar(db);
+          await _criarIndicesDesempenho(db);
+        }
       },
+    );
+  }
+
+  static Future<void> _criarIndicesDesempenho(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_movimentacoes_data ON movimentacoes(data)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_movimentacoes_importacao ON movimentacoes(importacao_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_agenda_movimentacao ON agenda(movimentacao_id)',
     );
   }
 
@@ -581,6 +603,50 @@ class BancoDados {
     }
 
     await db.transaction((txn) async {
+      final atuais = await txn.query(
+        'categorias',
+        where: 'id = ?',
+        whereArgs: [antiga.id],
+      );
+      if (atuais.isEmpty) {
+        throw StateError('Esta categoria não existe mais. Atualize a lista.');
+      }
+      final nomeMudou = antiga.nome != atualizada.nome;
+      final tipoMudou = antiga.tipo != atualizada.tipo;
+
+      if (tipoMudou) {
+        final ehPadrao = antiga.padrao || atuais.single['padrao'] == 1;
+        final vinculosCsv =
+            Sqflite.firstIntValue(
+              await txn.rawQuery(
+                'SELECT COUNT(*) FROM categorias_csv WHERE categoria_id = ?',
+                [antiga.id],
+              ),
+            ) ??
+            0;
+        final totalMovs =
+            Sqflite.firstIntValue(
+              await txn.rawQuery(
+                'SELECT COUNT(*) FROM movimentacoes WHERE categoria = ? AND tipo = ?',
+                [antiga.nome, antiga.tipo.name],
+              ),
+            ) ??
+            0;
+        final totalAgenda =
+            Sqflite.firstIntValue(
+              await txn.rawQuery(
+                'SELECT COUNT(*) FROM agenda WHERE categoria = ? AND tipo = ?',
+                [antiga.nome, antiga.tipo.name],
+              ),
+            ) ??
+            0;
+        if (ehPadrao || vinculosCsv > 0 || totalMovs > 0 || totalAgenda > 0) {
+          throw StateError(
+            'Não é possível alterar o tipo de uma categoria padrão ou que já possui lançamentos.',
+          );
+        }
+      }
+
       final dados = atualizada.paraMapa();
       dados.remove('id');
 
@@ -595,15 +661,27 @@ class BancoDados {
       if (quantidade != 1) {
         throw StateError('Esta categoria não existe mais. Atualize a lista.');
       }
-      final nomeMudou = antiga.nome != atualizada.nome;
-      final tipoMudou = antiga.tipo != atualizada.tipo;
 
-      if (nomeMudou || tipoMudou) {
+      if (nomeMudou) {
         await txn.update(
           'movimentacoes',
-          {'categoria': atualizada.nome, 'tipo': atualizada.tipo.name},
+          {'categoria': atualizada.nome},
           where: 'categoria = ? AND tipo = ?',
           whereArgs: [antiga.nome, antiga.tipo.name],
+        );
+        await txn.update(
+          'agenda',
+          {'categoria': atualizada.nome},
+          where: 'categoria = ? AND tipo = ?',
+          whereArgs: [antiga.nome, antiga.tipo.name],
+        );
+      }
+      if (tipoMudou) {
+        await txn.update(
+          'regras_importacao',
+          {'tipo': atualizada.tipo.name},
+          where: 'categoria_id = ?',
+          whereArgs: [antiga.id],
         );
       }
     });
@@ -902,8 +980,9 @@ class BancoDados {
       where: 'id = ?',
       whereArgs: [movimentacao.id],
     );
-    if (quantidade != 1)
+    if (quantidade != 1) {
       throw StateError('Esta movimentação não existe mais. Atualize a lista.');
+    }
     return quantidade;
   }
 

@@ -260,8 +260,9 @@ class _TelaTransferenciasState extends State<TelaTransferencias> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensagemErroSegura(e))),
+        );
       }
     } finally {
       if (mounted) {
@@ -504,8 +505,9 @@ class _TelaRevisarCategoriasState extends State<TelaRevisarCategorias> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensagemErroSegura(e))),
+        );
       }
     } finally {
       if (mounted) {

@@ -14,7 +14,7 @@ class GrupoDespesa {
   final String chave;
   String nome;
   final List<Movimentacao> itens = [];
-  double get total => itens.fold(0.0, (s, m) => s + m.valor);
+  double get total => itens.fold<int>(0, (s, m) => s + m.centavos) / 100;
 }
 
 List<GrupoDespesa> agruparDespesas(

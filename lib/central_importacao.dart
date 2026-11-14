@@ -66,7 +66,12 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Não foi possível selecionar os arquivos: $e'),
+            content: Text(
+              mensagemErroSegura(
+                e,
+                'Não foi possível selecionar os arquivos.',
+              ),
+            ),
           ),
         );
       }
@@ -102,8 +107,9 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensagemErroSegura(e))),
+        );
       }
     } finally {
       if (mounted) {
@@ -139,7 +145,8 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
         } catch (e) {
           if (!mounted) return;
           setState(() {
-            item.status = 'Erro: $e';
+            item.status =
+                'Erro: ${mensagemErroSegura(e, 'falha ao processar arquivo.')}';
           });
         }
       }

@@ -5,6 +5,9 @@ import 'package:excel_plus/excel_plus.dart';
 import 'dados_relatorio.dart';
 import 'exportador_csv.dart';
 
+String _textoSeguroExcel(String texto) =>
+    RegExp(r'^\s*[=+@\-\t\r\n]').hasMatch(texto) ? "'$texto" : texto;
+
 Uint8List gerarExcel(DadosRelatorio d) {
   final livro = Excel.createExcel();
   livro.rename('Sheet1', 'Resumo');
@@ -31,7 +34,7 @@ Uint8List gerarExcel(DadosRelatorio d) {
                 ? IntCellValue(v)
                 : v is double
                 ? DoubleCellValue(v)
-                : TextCellValue(v.toString()),
+                : TextCellValue(_textoSeguroExcel(v.toString())),
           )
           .toList(),
     );

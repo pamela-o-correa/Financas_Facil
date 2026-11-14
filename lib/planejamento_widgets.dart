@@ -1,20 +1,5 @@
 part of 'main.dart';
 
-class LegendaPlanejamento extends StatelessWidget {
-  const LegendaPlanejamento(this.texto, this.cor, {super.key});
-  final String texto;
-  final Color cor;
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(Icons.circle, size: 8, color: cor),
-      const SizedBox(width: 5),
-      Flexible(child: Text(texto, style: const TextStyle(fontSize: 12))),
-    ],
-  );
-}
-
 /// Recebe os totais do mesmo período usado nos demais relatórios.
 /// Todas as categorias continuam acessíveis para consultar suas movimentações.
 class GraficoRoscaCategorias extends StatelessWidget {
@@ -195,9 +180,11 @@ class _PintorRoscaCategorias extends CustomPainter {
 }
 
 List<MapEntry<String, double>> totaisCategorias(Iterable<Movimentacao> itens) {
-  final totais = <String, double>{};
+  final totaisCentavos = <String, int>{};
   for (final item in itens.where((m) => m.contabilizavel && m.tipo == TipoMovimentacao.despesa)) {
-    totais[item.categoria] = (totais[item.categoria] ?? 0) + item.valor;
+    totaisCentavos[item.categoria] = (totaisCentavos[item.categoria] ?? 0) + item.centavos;
   }
-  return totais.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+  return [
+    for (final e in totaisCentavos.entries) MapEntry(e.key, e.value / 100),
+  ]..sort((a, b) => b.value.compareTo(a.value));
 }

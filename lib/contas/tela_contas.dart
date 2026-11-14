@@ -211,7 +211,11 @@ class _TelaContasState extends State<TelaContas> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Não foi possível salvar a conta: $e')),
+          SnackBar(
+            content: Text(
+              mensagemErroSegura(e, 'Não foi possível salvar a conta.'),
+            ),
+          ),
         );
       }
     } finally {
@@ -248,9 +252,13 @@ class _TelaContasState extends State<TelaContas> {
           .showSnackBar(const SnackBar(content: Text('Conta atualizada.')));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Não foi possível editar: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              mensagemErroSegura(e, 'Não foi possível editar a conta.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -307,9 +315,13 @@ class _TelaContasState extends State<TelaContas> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Não foi possível reunir: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              mensagemErroSegura(e, 'Não foi possível reunir as contas.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _ocupado = false);
@@ -393,7 +405,11 @@ class _TelaContasState extends State<TelaContas> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Não foi possível excluir a conta: $e')),
+          SnackBar(
+            content: Text(
+              mensagemErroSegura(e, 'Não foi possível excluir a conta.'),
+            ),
+          ),
         );
       }
     } finally {

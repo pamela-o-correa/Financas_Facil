@@ -87,6 +87,25 @@ void main() {
     expect(r.banco.codigo, '077');
     expect(r.itens.single.centavos, 1000);
   });
+  test('Nubank e Itaú são detectados automaticamente com suas colunas', () {
+    final nubank = ler(
+      'Data,Valor,Identificador,Descrição\n01/09/2026,-45.90,abc-123,Transferência enviada pelo Pix - Mercado',
+    );
+    expect(nubank.banco.codigo, '260');
+    expect(nubank.itens.single.centavos, 4590);
+    expect(nubank.itens.single.tipo, TipoMovimentacao.despesa);
+    final itau = ler(
+      'data;lançamento;ag./origem;valor (R\$);saldos (R\$)\n01/09/2026;PIX TRANSF JOAO;0001;-120,50;1.500,00',
+    );
+    expect(itau.banco.codigo, '341');
+    expect(itau.itens.single.centavos, 12050);
+    expect(itau.itens.single.tipo, TipoMovimentacao.despesa);
+    final multiDescricao = ler(
+      'Data;Lançamento;Histórico;Valor\n01/09/2026;Compra Cartão;Padaria Central;-18,00',
+    );
+    expect(multiDescricao.precisaMapear, false);
+    expect(multiDescricao.itens.single.centavos, 1800);
+  });
   test(
     'Extratos com apenas cabeçalho são vazios, sem erro de identificação',
     () {

@@ -118,7 +118,7 @@ object AgendaNotifications {
 
     @Suppress("DEPRECATION") // Compatibilidade com Android 7, sem NotificationChannel.
     private fun show(context: Context, reminder: Reminder) {
-        val tap = PendingIntent.getActivity(context, 0,
+        val tap = PendingIntent.getActivity(context, reminder.tag.hashCode(),
             Intent(context, MainActivity::class.java)
                 .setData(Uri.parse("financas-facil://lembrete/${reminder.profile}/${reminder.id}"))
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -153,29 +153,35 @@ object AgendaNotifications {
         val names = mutableMapOf("1" to "Pessoal")
         val profiles = context.getDatabasePath("financas_perfis.db")
         if (profiles.exists()) {
-            SQLiteDatabase.openDatabase(profiles.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                db.rawQuery("SELECT id, nome FROM perfis", null).use { cursor ->
-                    while (cursor.moveToNext()) names[cursor.getLong(0).toString()] = cursor.getString(1)
+            try {
+                SQLiteDatabase.openDatabase(profiles.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                    db.rawQuery("SELECT id, nome FROM perfis", null).use { cursor ->
+                        while (cursor.moveToNext()) names[cursor.getLong(0).toString()] = cursor.getString(1)
+                    }
                 }
-            }
+            } catch (_: Exception) {}
         }
         val result = mutableListOf<Reminder>()
         for (file in files) {
             val profile = if (file.name == "financas_facil.db") "1" else file.name.removePrefix("financas_perfil_").removeSuffix(".db")
-            SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                val exists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='agenda'", null).use { it.moveToFirst() }
-                if (!exists) return@use
-                db.rawQuery("SELECT id, titulo, tipo, data, lembrete, hora, minuto FROM agenda WHERE status='pendente' AND lembrete IS NOT NULL", null).use { cursor ->
-                    while (cursor.moveToNext()) {
-                        val date = cursor.getString(3)
-                        val time = reminderTime(date, cursor.getInt(4), cursor.getInt(5), cursor.getInt(6))
-                        val formatted = date.split('-').reversed().joinToString("/")
-                        result.add(Reminder(profile, cursor.getLong(0),
-                            "${if (cursor.getString(2) == "receita") "A receber" else "A pagar"} • ${names[profile] ?: "Perfil $profile"}",
-                            "${cursor.getString(1)} • vence em $formatted", time))
+            try {
+                SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                    val exists = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='agenda'", null).use { it.moveToFirst() }
+                    if (!exists) return@use
+                    db.rawQuery("SELECT id, titulo, tipo, data, lembrete, hora, minuto FROM agenda WHERE status='pendente' AND lembrete IS NOT NULL", null).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            try {
+                                val date = cursor.getString(3)
+                                val time = reminderTime(date, cursor.getInt(4), cursor.getInt(5), cursor.getInt(6))
+                                val formatted = date.split('-').reversed().joinToString("/")
+                                result.add(Reminder(profile, cursor.getLong(0),
+                                    "${if (cursor.getString(2) == "receita") "A receber" else "A pagar"} • ${names[profile] ?: "Perfil $profile"}",
+                                    "${cursor.getString(1)} • vence em $formatted", time))
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
-            }
+            } catch (_: Exception) {}
         }
         return result
     }
