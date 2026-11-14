@@ -11,38 +11,19 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
-import android.net.Uri
+import androidx.core.net.toUri
 import android.os.Build
 import android.util.Log
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
+import com.example.financas_facil.ReminderPolicy.Reminder
 import java.util.concurrent.Executors
 
 /** O banco financeiro é somente lido; o agendamento não cria movimentações. */
 object AgendaNotifications {
     const val CHANNEL = "compromissos_financeiros"
-    private const val ACTION = "com.example.financas_facil.AGENDA_REMINDER"
+    const val ACTION = "com.example.financas_facil.AGENDA_REMINDER"
     private const val PREFS = "agenda_notifications"
     private const val NEXT = "next_alarm"
     private val executor = Executors.newSingleThreadExecutor()
-
-    data class Reminder(val profile: String, val id: Long, val title: String, val text: String, val time: Long) {
-        val tag get() = "agenda:$profile:$id"
-        val fingerprint get() = "$tag:$time"
-    }
-
-    internal data class Plan(val due: List<Reminder>, val next: Long?, val obsolete: Set<String>)
-    internal fun plan(reminders: List<Reminder>, delivered: Set<String>, now: Long, dueFrom: Long?, permitted: Boolean): Plan {
-        val active = reminders.map { it.fingerprint }.toSet()
-        val due = if (permitted && dueFrom != null) reminders.filter {
-            it.time in dueFrom..now && it.fingerprint !in delivered
-        } else emptyList()
-        val next = if (permitted) reminders.filter {
-            it.time > now && it.fingerprint !in delivered
-        }.minOfOrNull { it.time } else null
-        return Plan(due, next, delivered - active)
-    }
 
     fun runAsync(block: () -> Unit) { executor.execute(block) }
     fun refresh(context: Context) = runAsync {
@@ -63,7 +44,7 @@ object AgendaNotifications {
         createChannel(context)
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= 24 && !manager.areNotificationsEnabled()) return false
+        if (!manager.areNotificationsEnabled()) return false
         return Build.VERSION.SDK_INT < 26 || manager.getNotificationChannel(CHANNEL).importance != NotificationManager.IMPORTANCE_NONE
     }
 
@@ -82,7 +63,7 @@ object AgendaNotifications {
         val scheduled = prefs.getLong(NEXT, 0)
         val due = dueFrom ?: scheduled.takeIf { recoverDue && it > 0 && it <= now }
         val delivered = prefs.getStringSet("delivered", emptySet())!!.toMutableSet()
-        val plan = plan(reminders, delivered, now, due, enabled(context))
+        val plan = ReminderPolicy.plan(reminders, delivered, now, due, enabled(context))
         for (old in plan.obsolete) {
             manager.cancel(old.substringBeforeLast(':'), 0)
             delivered.remove(old)
@@ -99,8 +80,7 @@ object AgendaNotifications {
         alarm.cancel(alarmIntent(context))
         if (next != null) {
             // Alarmes inexatos não exigem acesso especial. O Android pode atrasar a entrega em economia de bateria.
-            if (Build.VERSION.SDK_INT >= 23) alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, alarmIntent(context, next))
-            else alarm.set(AlarmManager.RTC_WAKEUP, next, alarmIntent(context, next))
+            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, alarmIntent(context, next))
         }
     }
 
@@ -120,7 +100,7 @@ object AgendaNotifications {
     private fun show(context: Context, reminder: Reminder) {
         val tap = PendingIntent.getActivity(context, reminder.tag.hashCode(),
             Intent(context, MainActivity::class.java)
-                .setData(Uri.parse("financas-facil://lembrete/${reminder.profile}/${reminder.id}"))
+                .setData("financas-facil://lembrete/${reminder.profile}/${reminder.id}".toUri())
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, CHANNEL) else Notification.Builder(context)
@@ -132,24 +112,12 @@ object AgendaNotifications {
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(reminder.tag, 0, notification)
     }
 
-    internal fun reminderTime(date: String, daysBefore: Int, hour: Int, minute: Int): Long {
-        require(daysBefore >= 0 && hour in 0..23 && minute in 0..59)
-        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
-        require(Regex("\\d{4}-\\d{2}-\\d{2}").matches(date))
-        val calendar = Calendar.getInstance().apply {
-            time = requireNotNull(parser.parse(date))
-            add(Calendar.DAY_OF_MONTH, -daysBefore)
-            set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute)
-            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }
-        return calendar.timeInMillis
-    }
-
     private fun readReminders(context: Context): List<Reminder> {
-        val directory = context.getDatabasePath("financas_facil.db").parentFile ?: return emptyList()
+        val directory = requireNotNull(context.getDatabasePath("financas_facil.db").parentFile)
+        if (!directory.exists()) return emptyList()
         val files = directory.listFiles()?.filter {
             it.name == "financas_facil.db" || Regex("financas_perfil_\\d+\\.db").matches(it.name)
-        } ?: return emptyList()
+        } ?: throw IllegalStateException("Nao foi possivel listar os bancos de lembretes")
         val names = mutableMapOf("1" to "Pessoal")
         val profiles = context.getDatabasePath("financas_perfis.db")
         if (profiles.exists()) {
@@ -159,10 +127,12 @@ object AgendaNotifications {
                         while (cursor.moveToNext()) names[cursor.getLong(0).toString()] = cursor.getString(1)
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (error: Exception) {
+                Log.w("Agenda", "Nomes de perfis indisponiveis; usando identificadores", error)
+            }
         }
-        val result = mutableListOf<Reminder>()
-        for (file in files) {
+        return ReminderPolicy.readComplete(files) { file ->
+            val result = mutableListOf<Reminder>()
             val profile = if (file.name == "financas_facil.db") "1" else file.name.removePrefix("financas_perfil_").removeSuffix(".db")
             try {
                 SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
@@ -172,27 +142,51 @@ object AgendaNotifications {
                         while (cursor.moveToNext()) {
                             try {
                                 val date = cursor.getString(3)
-                                val time = reminderTime(date, cursor.getInt(4), cursor.getInt(5), cursor.getInt(6))
+                                val time = ReminderPolicy.reminderTime(date, cursor.getInt(4), cursor.getInt(5), cursor.getInt(6))
                                 val formatted = date.split('-').reversed().joinToString("/")
                                 result.add(Reminder(profile, cursor.getLong(0),
                                     "${if (cursor.getString(2) == "receita") "A receber" else "A pagar"} • ${names[profile] ?: "Perfil $profile"}",
                                     "${cursor.getString(1)} • vence em $formatted", time))
-                            } catch (_: Exception) {}
+                            } catch (error: Exception) {
+                                Log.w("Agenda", "Lembrete invalido ignorado", error)
+                            }
                         }
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (error: Exception) {
+                // Nao retornar lista parcial: synchronize preserva alarmes e preferencias.
+                throw IllegalStateException("Nao foi possivel ler os lembretes", error)
+            }
+            result
         }
-        return result
+    }
+
+    fun retry(context: Context) {
+        val expected = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(NEXT, 0)
+        if (expected <= 0 || !enabled(context)) return
+        val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        // Preserva o horario original no Intent para recuperar vencidos sem duplicar.
+        alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + 5 * 60_000, alarmIntent(context, expected))
     }
 }
 
 class AgendaReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        when (intent.action) {
+            AgendaNotifications.ACTION, Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED -> Unit
+            else -> return
+        }
         val pending = goAsync()
         AgendaNotifications.runAsync {
             try { AgendaNotifications.receive(context.applicationContext, intent) }
-            catch (error: Exception) { Log.e("Agenda", "Falha ao processar lembrete", error) }
+            catch (error: Exception) {
+                Log.e("Agenda", "Falha ao processar lembrete", error)
+                try { AgendaNotifications.retry(context.applicationContext) }
+                catch (retryError: Exception) { Log.e("Agenda", "Falha ao reagendar tentativa", retryError) }
+            }
             finally { pending.finish() }
         }
     }

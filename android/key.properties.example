@@ -1,0 +1,6 @@
+# Copie para key.properties (ignorado) ou use variaveis FINANCAS_*.
+# Mantenha o keystore fora do repositorio. Nao comite credenciais reais.
+storeFile=
+storePassword=
+keyAlias=
+keyPassword=
