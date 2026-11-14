@@ -94,7 +94,9 @@ class AlteracaoHistorico {
       }
       final lixeiraIds = <int>[];
       if (excluir) {
-        for (final id in ids) { lixeiraIds.addAll(await LixeiraBanco.arquivar(txn, 'id = ?', [id])); }
+        for (final id in ids) {
+          lixeiraIds.addAll(await LixeiraBanco.arquivar(txn, 'id = ?', [id]));
+        }
       }
       for (final id in ids) {
         if (excluir) {
@@ -127,12 +129,20 @@ class AlteracaoHistorico {
       : a.length == b.length &&
             a.keys.every((k) => b.containsKey(k) && a[k] == b[k]);
 
-  Future<void> desfazer({Future<void> Function(DatabaseExecutor)? junto}) async {
+  Future<void> desfazer({
+    Future<void> Function(DatabaseExecutor)? junto,
+  }) async {
     if (_desfeita) return;
     await db.transaction((txn) async {
       for (final id in _lixeiraIds) {
-        final itens = await txn.query('lixeira', where: 'id = ? AND expira_em > ?', whereArgs: [id, DateTime.now().toUtc().toIso8601String()]);
-        if (itens.isEmpty) throw StateError('O item já foi recuperado ou removido da lixeira.');
+        final itens = await txn.query(
+          'lixeira',
+          where: 'id = ? AND expira_em > ?',
+          whereArgs: [id, DateTime.now().toUtc().toIso8601String()],
+        );
+        if (itens.isEmpty) {
+          throw StateError('O item já foi recuperado ou removido da lixeira.');
+        }
         await txn.delete('lixeira', where: 'id = ?', whereArgs: [id]);
       }
       final atuais = await _ler(txn, 'movimentacoes', depois.keys);
@@ -226,10 +236,7 @@ class AvisoDesativadas extends StatelessWidget {
             color: semantica.alerta.withValues(alpha: 0.16),
             borderRadius: BorderRadius.circular(RaioBorda.sm),
           ),
-          child: Icon(
-            Icons.pause_circle_outline,
-            color: semantica.alerta,
-          ),
+          child: Icon(Icons.pause_circle_outline, color: semantica.alerta),
         ),
         title: Text(
           '$quantidade ${quantidade == 1 ? 'movimentação desativada' : 'movimentações desativadas'} neste período',

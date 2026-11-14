@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:financas_facil/main.dart';
 
@@ -50,7 +50,10 @@ void main() {
     );
     expect(espresso.scaffoldBackgroundColor, const Color(0xFFFAF6F0));
     expect(espresso.colorScheme.surfaceContainerLow, const Color(0xFFFFFFFF));
-    expect(espresso.colorScheme.surfaceContainerHighest, const Color(0xFFE8D7C3));
+    expect(
+      espresso.colorScheme.surfaceContainerHighest,
+      const Color(0xFFE8D7C3),
+    );
     expect(espresso.colorScheme.primary, const Color(0xFF35271F));
     expect(espresso.colorScheme.secondary, const Color(0xFF795D49));
 
@@ -69,7 +72,10 @@ void main() {
       brilhoSolicitado: Brightness.light,
     );
     expect(amethyst.scaffoldBackgroundColor, const Color(0xFFF7F4FA));
-    expect(amethyst.colorScheme.surfaceContainerHighest, const Color(0xFFEBE4F3));
+    expect(
+      amethyst.colorScheme.surfaceContainerHighest,
+      const Color(0xFFEBE4F3),
+    );
     expect(amethyst.colorScheme.primary, const Color(0xFF392B53));
     expect(amethyst.colorScheme.secondary, const Color(0xFF775C9E));
     expect(amethyst.colorScheme.onSurface, const Color(0xFF35284A));
@@ -80,7 +86,9 @@ void main() {
     expect(amethyst.extension<CoresSemanticas>(), isNotNull);
   });
 
-  testWidgets('SeletorTemaVisual exibe os 4 temas e permite seleção imediata', (tester) async {
+  testWidgets('SeletorTemaVisual exibe os 4 temas e permite seleção imediata', (
+    tester,
+  ) async {
     String tema = 'Amethyst';
     await tester.pumpWidget(
       MaterialApp(
@@ -125,7 +133,9 @@ void main() {
     expect(restaurada.centavos, 12550);
   });
 
-  testWidgets('CardResumo renderiza sem overflow nos 4 temas minimalistas', (tester) async {
+  testWidgets('CardResumo renderiza sem overflow nos 4 temas minimalistas', (
+    tester,
+  ) async {
     for (final nomeTema in ['Noir', 'Espresso', 'Sage', 'Amethyst']) {
       final tema = construirTemaPremium(
         nomeTema: nomeTema,
@@ -173,64 +183,67 @@ void main() {
     }
   });
 
-  testWidgets('TelaFormulario permite alternar atalhos de data Hoje e Ontem e preserva conta/observacoes', (tester) async {
-    Movimentacao? salva;
-    final existente = Movimentacao(
-      id: 10,
-      tipo: TipoMovimentacao.despesa,
-      valor: 89.90,
-      categoria: 'Outros',
-      descricao: 'Internet',
-      data: DateTime(2026, 5, 10),
-      conta: 'Carteira Nubank',
-      observacoes: 'Débito automático',
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: construirTemaPremium(
-          nomeTema: 'Espresso',
-          brilhoSolicitado: Brightness.light,
-        ),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () async {
-                salva = await Navigator.push<Movimentacao>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => TelaFormulario(
-                      categorias: const [
-                        Categoria(
-                          nome: 'Outros',
-                          tipo: TipoMovimentacao.despesa,
-                          codigoIcone: 0,
-                          codigoCor: 0xFF35271F,
-                        ),
-                      ],
-                      movimentacao: existente,
+  testWidgets(
+    'TelaFormulario permite alternar atalhos de data Hoje e Ontem e preserva conta/observacoes',
+    (tester) async {
+      Movimentacao? salva;
+      final existente = Movimentacao(
+        id: 10,
+        tipo: TipoMovimentacao.despesa,
+        valor: 89.90,
+        categoria: 'Outros',
+        descricao: 'Internet',
+        data: DateTime(2026, 5, 10),
+        conta: 'Carteira Nubank',
+        observacoes: 'Débito automático',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: construirTemaPremium(
+            nomeTema: 'Espresso',
+            brilhoSolicitado: Brightness.light,
+          ),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async {
+                  salva = await Navigator.push<Movimentacao>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TelaFormulario(
+                        categorias: const [
+                          Categoria(
+                            nome: 'Outros',
+                            tipo: TipoMovimentacao.despesa,
+                            codigoIcone: 0,
+                            codigoCor: 0xFF35271F,
+                          ),
+                        ],
+                        movimentacao: existente,
+                      ),
                     ),
-                  ),
-                );
-              },
-              child: const Text('Editar'),
+                  );
+                },
+                child: const Text('Editar'),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.text('Editar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Valor da despesa'), findsOneWidget);
-    await tester.tap(find.text('Hoje'));
-    await tester.pumpAndSettle();
-    final botaoSalvar = find.text('Salvar alterações');
-    await tester.ensureVisible(botaoSalvar);
-    await tester.tap(botaoSalvar);
-    await tester.pumpAndSettle();
-    expect(salva, isNotNull);
-    expect(salva!.conta, 'Carteira Nubank');
-    expect(salva!.observacoes, 'Débito automático');
-    expect(salva!.data, DateUtils.dateOnly(DateTime.now()));
-    expect(tester.takeException(), isNull);
-  });
+      );
+      await tester.tap(find.text('Editar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Valor da despesa'), findsOneWidget);
+      await tester.tap(find.text('Hoje'));
+      await tester.pumpAndSettle();
+      final botaoSalvar = find.text('Salvar alterações');
+      await tester.ensureVisible(botaoSalvar);
+      await tester.tap(botaoSalvar);
+      await tester.pumpAndSettle();
+      expect(salva, isNotNull);
+      expect(salva!.conta, 'Carteira Nubank');
+      expect(salva!.observacoes, 'Débito automático');
+      expect(salva!.data, DateUtils.dateOnly(DateTime.now()));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

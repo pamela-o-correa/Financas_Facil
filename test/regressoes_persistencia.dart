@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:financas_facil/main.dart';
 import 'package:financas_facil/contas/contas_banco.dart';
+import 'package:financas_facil/backup/backup_integral.dart';
+import 'package:financas_facil/exportacao/repositorio_relatorio.dart';
 
 Future<void> verificarRegressoesPersistencia(BancoDados banco) async {
   final db = await banco.database;
@@ -53,6 +55,8 @@ Future<void> verificarRegressoesPersistencia(BancoDados banco) async {
     double.infinity,
     double.negativeInfinity,
     1e308,
+    1e100,
+    0.001,
     0.0,
     -1.0,
   ]) {
@@ -76,6 +80,26 @@ Future<void> verificarRegressoesPersistencia(BancoDados banco) async {
       movimento(TipoMovimentacao.despesa, null).copyWith(id: 999999),
     ),
     throwsStateError,
+  );
+  final antesVinculo = await db.query('movimentacoes', orderBy: 'id');
+  await expectLater(
+    banco.inserir(movimento(TipoMovimentacao.despesa, 999999)),
+    throwsStateError,
+  );
+  await expectLater(
+    banco.atualizar(
+      movimento(
+        TipoMovimentacao.despesa,
+        destino.id,
+      ).copyWith(id: saida, importacaoId: 999999),
+    ),
+    throwsStateError,
+  );
+  expect(
+    await db.query('movimentacoes', orderBy: 'id'),
+    antesVinculo,
+    reason:
+        'Referências inválidas não podem criar nem sobrescrever movimentações',
   );
 
   await contas.salvar(
@@ -213,17 +237,18 @@ Future<void> verificarRegressoesPersistencia(BancoDados banco) async {
     ),
     atualizada: outra,
   );
-  final primeiroCompromisso = (await AgendaBanco(Future.value(db)).listar())
-      .firstWhere((c) => c.titulo == 'Regressão agenda');
-  await AgendaBanco(Future.value(db)).realizar(
-    primeiroCompromisso,
-    DateTime(2026, 9, 28),
-  );
-  final movId = (await db.query(
-    'agenda',
-    where: 'id = ?',
-    whereArgs: [primeiroCompromisso.id],
-  )).single['movimentacao_id'] as int?;
+  final primeiroCompromisso = (await AgendaBanco(
+    Future.value(db),
+  ).listar()).firstWhere((c) => c.titulo == 'Regressão agenda');
+  await AgendaBanco(Future.value(db))
+      .realizar(primeiroCompromisso, DateTime(2026, 9, 28));
+  final movId =
+      (await db.query(
+            'agenda',
+            where: 'id = ?',
+            whereArgs: [primeiroCompromisso.id],
+          )).single['movimentacao_id']
+          as int?;
   expect(movId, isNotNull);
   expect(
     (await db.query(
@@ -232,6 +257,32 @@ Future<void> verificarRegressoesPersistencia(BancoDados banco) async {
       whereArgs: [movId],
     )).single['conta_id'],
     destino.id,
+  );
+  final movimentosAntes = await db.query('movimentacoes', orderBy: 'id');
+  final linhasRelatorio = await RepositorioRelatorio(
+    Future.value(db),
+    'Teste',
+  ).carregar();
+  expect(
+    linhasRelatorio.where((l) => !l.prevista).length,
+    movimentosAntes.length,
+  );
+  expect(
+    linhasRelatorio.where((l) => l.prevista).length,
+    (await db.query('agenda')).length,
+  );
+  expect(linhasRelatorio.every((l) => l.perfil == 'Teste'), isTrue);
+  final copia = await capturarBanco(db);
+  final tabelas = copia['tabelas'] as Map;
+  expect(
+    tabelas.keys,
+    containsAll(['movimentacoes', 'preferencias', 'agenda', 'lixeira']),
+  );
+  expect(tabelas['movimentacoes'], unorderedEquals(movimentosAntes));
+  expect(
+    await db.query('movimentacoes', orderBy: 'id'),
+    movimentosAntes,
+    reason: 'Gerar snapshot de backup não pode alterar registros nem vínculos',
   );
   await banco.restaurarAplicativo();
   for (final tabela in [

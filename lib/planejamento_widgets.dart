@@ -29,8 +29,9 @@ class GraficoRoscaCategorias extends StatelessWidget {
         for (var i = 0; i < totais.length; i++)
           Builder(
             builder: (context) {
-              final proporcao =
-                  total <= 0 ? 0.0 : (totais[i].value / total).clamp(0.0, 1.0);
+              final proporcao = total <= 0
+                  ? 0.0
+                  : (totais[i].value / total).clamp(0.0, 1.0);
               return InkWell(
                 onTap: () => onCategoria(totais[i].key),
                 borderRadius: BorderRadius.circular(RaioBorda.sm),
@@ -113,9 +114,7 @@ class GraficoRoscaCategorias extends StatelessWidget {
       color: esquema.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(RaioBorda.cartao),
-        side: BorderSide(
-          color: esquema.outlineVariant.withValues(alpha: 0.65),
-        ),
+        side: BorderSide(color: esquema.outlineVariant.withValues(alpha: 0.65)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -240,8 +239,11 @@ class _PintorRoscaCategorias extends CustomPainter {
 
 List<MapEntry<String, double>> totaisCategorias(Iterable<Movimentacao> itens) {
   final totaisCentavos = <String, int>{};
-  for (final item in itens.where((m) => m.contabilizavel && m.tipo == TipoMovimentacao.despesa)) {
-    totaisCentavos[item.categoria] = (totaisCentavos[item.categoria] ?? 0) + item.centavos;
+  for (final item in itens.where(
+    (m) => m.contabilizavel && m.tipo == TipoMovimentacao.despesa,
+  )) {
+    totaisCentavos[item.categoria] =
+        (totaisCentavos[item.categoria] ?? 0) + item.centavos;
   }
   return [
     for (final e in totaisCentavos.entries) MapEntry(e.key, e.value / 100),

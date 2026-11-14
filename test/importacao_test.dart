@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:financas_facil/importacao/validacao.dart';
 import 'package:financas_facil/importacao/tela_mapear_csv.dart';
@@ -282,15 +282,28 @@ void main() {
     }
     expect(find.text('Conferir movimentações'), findsOneWidget);
   });
-  testWidgets('Adicionar banco reutiliza Nubank e aceita nome personalizado', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: TelaEscolherConta(contas: [])));
+  testWidgets('Adicionar banco reutiliza Nubank e aceita nome personalizado', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: TelaEscolherConta(contas: [])),
+    );
     for (final nome in [' nubank ', 'Banco Local']) {
       await tester.tap(find.text('Adicionar banco'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextFormField)), nome);
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextFormField),
+        ),
+        nome,
+      );
       await tester.tap(find.text('Adicionar'));
       await tester.pumpAndSettle();
-      expect(find.text(nome.trim() == 'nubank' ? 'Nubank' : nome).hitTestable(), findsOneWidget);
+      expect(
+        find.text(nome.trim() == 'nubank' ? 'Nubank' : nome).hitTestable(),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     }
   });

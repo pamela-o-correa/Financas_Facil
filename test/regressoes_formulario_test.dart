@@ -1,5 +1,4 @@
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:financas_facil/main.dart';
 
@@ -58,7 +57,14 @@ void main() {
   testWidgets('NaN e infinito são rejeitados antes de retornar lançamento', (
     tester,
   ) async {
-    for (final valor in ['NaN', 'Infinity', '1e999', '1e308']) {
+    for (final valor in [
+      'NaN',
+      'Infinity',
+      '1e999',
+      '1e308',
+      '1e100',
+      '0.001',
+    ]) {
       await abrir(tester);
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Valor'),

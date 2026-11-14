@@ -260,9 +260,8 @@ class _TelaTransferenciasState extends State<TelaTransferencias> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagemErroSegura(e))),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(mensagemErroSegura(e))));
       }
     } finally {
       if (mounted) {
@@ -357,9 +356,8 @@ class _TelaTransferenciasState extends State<TelaTransferencias> {
             const SizedBox(height: 20),
             Text(
               'Sugestões (${pares.length})',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             if (pares.isEmpty)
@@ -428,9 +426,8 @@ class _TelaTransferenciasState extends State<TelaTransferencias> {
             const SizedBox(height: 16),
             Text(
               'Confirmadas (${confirmadas.length})',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             for (final m in confirmadas)
@@ -591,9 +588,8 @@ class _TelaRevisarCategoriasState extends State<TelaRevisarCategorias> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagemErroSegura(e))),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(mensagemErroSegura(e))));
       }
     } finally {
       if (mounted) {

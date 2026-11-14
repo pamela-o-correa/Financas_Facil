@@ -67,10 +67,7 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              mensagemErroSegura(
-                e,
-                'Não foi possível selecionar os arquivos.',
-              ),
+              mensagemErroSegura(e, 'Não foi possível selecionar os arquivos.'),
             ),
           ),
         );
@@ -107,9 +104,8 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagemErroSegura(e))),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(mensagemErroSegura(e))));
       }
     } finally {
       if (mounted) {
@@ -246,10 +242,7 @@ class _TelaCentralImportacaoState extends State<TelaCentralImportacao> {
             const SizedBox(height: 8),
             Text(
               'A conta escolhida será usada nos arquivos pendentes. Para arquivos de outra conta, altere o destino antes de revisar.',
-              style: TextStyle(
-                fontSize: 12,
-                color: esquema.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 12, color: esquema.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
             Container(

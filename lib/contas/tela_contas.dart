@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'contas_banco.dart';
 
@@ -515,11 +515,7 @@ class _TelaContasState extends State<TelaContas> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 18,
-                      color: esquema.primary,
-                    ),
+                    Icon(Icons.info_outline, size: 18, color: esquema.primary),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -691,8 +687,9 @@ class _TelaRelatorioBancosState extends State<TelaRelatorioBancos> {
               return Column(
                 children: snapshot.data!.map((b) {
                   final volume = (b['volume'] as num).toDouble();
-                  final proporcao =
-                      total <= 0 ? 0.0 : (volume / total).clamp(0.0, 1.0);
+                  final proporcao = total <= 0
+                      ? 0.0
+                      : (volume / total).clamp(0.0, 1.0);
                   return Card(
                     elevation: 0,
                     margin: const EdgeInsets.only(bottom: 12),
@@ -729,9 +726,7 @@ class _TelaRelatorioBancosState extends State<TelaRelatorioBancos> {
                               Expanded(
                                 child: Text(
                                   b['banco_nome'] as String,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
+                                  style: Theme.of(context).textTheme.titleMedium
                                       ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
                               ),

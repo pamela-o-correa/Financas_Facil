@@ -1,8 +1,7 @@
 import 'dart:async';
 
 import 'package:financas_facil/main.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -38,11 +37,7 @@ class AgendaTeste extends AgendaBanco {
 Widget app(Widget child, {double escala = 1}) => MaterialApp(
   locale: const Locale('pt', 'BR'),
   supportedLocales: const [Locale('pt', 'BR')],
-  localizationsDelegates: const [
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
+  localizationsDelegates: GlobalMaterialLocalizations.delegates,
   theme: ThemeData(
     colorScheme: ColorScheme.fromSeed(
       seedColor: const Color(0xFF6750A4),
@@ -250,10 +245,14 @@ void main() {
         await tester.pumpAndSettle();
       }
       await tester.ensureVisible(
-        find.text('Compromisso com descrição longa para verificar a leitura').first,
+        find
+            .text('Compromisso com descrição longa para verificar a leitura')
+            .first,
       );
       await tester.tap(
-        find.text('Compromisso com descrição longa para verificar a leitura').first,
+        find
+            .text('Compromisso com descrição longa para verificar a leitura')
+            .first,
       );
       await tester.pumpAndSettle();
 

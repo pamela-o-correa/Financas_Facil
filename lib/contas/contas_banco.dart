@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'lixeira_banco.dart';
 
 import 'package:sqflite/sqflite.dart';
@@ -138,18 +139,44 @@ class ContasBanco {
     });
   }
 
-  static Future<void> _moverVinculos(DatabaseExecutor txn, int origem, int? destino) async {
+  static Future<void> _moverVinculos(
+    DatabaseExecutor txn,
+    int origem,
+    int? destino,
+  ) async {
     final colunas = await txn.rawQuery('PRAGMA table_info(movimentacoes)');
-    final temTransferencias = colunas.any((c) => c['name'] == 'transferencia_par');
-    final pares = !temTransferencias ? <Map<String, Object?>>[] : await txn.rawQuery('SELECT m.id, m.transferencia_par FROM movimentacoes m JOIN movimentacoes p ON p.id = m.transferencia_par WHERE m.conta_id = ? AND p.transferencia_par = m.id', [origem]);
+    final temTransferencias = colunas.any(
+      (c) => c['name'] == 'transferencia_par',
+    );
+    final pares = !temTransferencias
+        ? <Map<String, Object?>>[]
+        : await txn.rawQuery(
+            'SELECT m.id, m.transferencia_par FROM movimentacoes m JOIN movimentacoes p ON p.id = m.transferencia_par WHERE m.conta_id = ? AND p.transferencia_par = m.id',
+            [origem],
+          );
     for (final tabela in ['movimentacoes', 'importacoes']) {
-      await txn.update(tabela, {'conta_id':destino}, where:'conta_id = ?', whereArgs:[origem]);
+      await txn.update(
+        tabela,
+        {'conta_id': destino},
+        where: 'conta_id = ?',
+        whereArgs: [origem],
+      );
     }
     // Existing triggers deliberately break a pair when editing financial facts.
     // Here only account registration changes; restore the same confirmed pair.
     for (final par in pares) {
-      await txn.update('movimentacoes', {'transferencia_par':par['transferencia_par']}, where:'id = ?', whereArgs:[par['id']]);
-      await txn.update('movimentacoes', {'transferencia_par':par['id']}, where:'id = ?', whereArgs:[par['transferencia_par']]);
+      await txn.update(
+        'movimentacoes',
+        {'transferencia_par': par['transferencia_par']},
+        where: 'id = ?',
+        whereArgs: [par['id']],
+      );
+      await txn.update(
+        'movimentacoes',
+        {'transferencia_par': par['id']},
+        where: 'id = ?',
+        whereArgs: [par['transferencia_par']],
+      );
     }
   }
 
@@ -196,7 +223,11 @@ class ContasBanco {
         throw StateError('Esta conta não existe neste perfil.');
       }
       if (apagarDados) {
-        await LixeiraBanco.arquivar(txn, 'conta_id = ? OR importacao_id IN (SELECT id FROM importacoes WHERE conta_id = ?)', [contaId, contaId]);
+        await LixeiraBanco.arquivar(
+          txn,
+          'conta_id = ? OR importacao_id IN (SELECT id FROM importacoes WHERE conta_id = ?)',
+          [contaId, contaId],
+        );
         await txn.delete(
           'movimentacoes',
           where: 'conta_id = ? OR importacao_id IN (SELECT id FROM importacoes WHERE conta_id = ?)',
@@ -325,12 +356,16 @@ class ContasBanco {
         if (item.data.isBefore(minData)) minData = item.data;
         if (item.data.isAfter(maxData)) maxData = item.data;
       }
-      final inicio = DateTime(minData.year, minData.month, minData.day)
-          .toIso8601String()
-          .split('T')
-          .first;
-      final fim = DateTime(maxData.year, maxData.month, maxData.day + 1)
-          .toIso8601String();
+      final inicio = DateTime(
+        minData.year,
+        minData.month,
+        minData.day,
+      ).toIso8601String().split('T').first;
+      final fim = DateTime(
+        maxData.year,
+        maxData.month,
+        maxData.day + 1,
+      ).toIso8601String();
       existentes = await db.query(
         'movimentacoes',
         columns: ['data', 'valor', 'tipo', 'descricao'],
@@ -444,5 +479,3 @@ String mensagemErroSegura(
   }
   return padrao;
 }
-
-

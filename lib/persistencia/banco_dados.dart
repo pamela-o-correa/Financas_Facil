@@ -164,8 +164,16 @@ class BancoDados {
       await _inserirCategoriasPadrao(db);
       return db;
     } catch (_) {
-      if (db != null) await db.close();
       _abertura = null;
+      if (db != null) {
+        try {
+          await db.close();
+        } catch (_) {
+          debugPrint(
+            'Não foi possível encerrar a conexão após falha na abertura.',
+          );
+        }
+      }
       rethrow;
     }
   }
@@ -937,6 +945,8 @@ class BancoDados {
   static void _validarMovimentacao(Movimentacao movimentacao) {
     if (!movimentacao.valor.isFinite ||
         !(movimentacao.valor * 100).isFinite ||
+        (movimentacao.valor * 100).abs() > maximoCentavosExatos ||
+        (movimentacao.valor * 100).round() <= 0 ||
         movimentacao.valor <= 0) {
       throw ArgumentError('Informe um valor válido.');
     }
@@ -949,7 +959,33 @@ class BancoDados {
     final dados = movimentacao.toMap();
     dados.remove('id');
 
-    return db.insert('movimentacoes', dados);
+    return db.transaction((txn) async {
+      await _validarVinculos(txn, movimentacao);
+      return txn.insert('movimentacoes', dados);
+    });
+  }
+
+  static Future<void> _validarVinculos(
+    DatabaseExecutor db,
+    Movimentacao movimentacao,
+  ) async {
+    for (final vinculo in {
+      'contas': movimentacao.contaId,
+      'importacoes': movimentacao.importacaoId,
+    }.entries) {
+      if (vinculo.value == null) continue;
+      final existentes = await db.query(
+        vinculo.key,
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [vinculo.value],
+      );
+      if (existentes.isEmpty) {
+        throw StateError(
+          'A conta ou importação vinculada não existe mais. Atualize a lista.',
+        );
+      }
+    }
   }
 
   Future<List<Movimentacao>> listar() async {
@@ -974,16 +1010,21 @@ class BancoDados {
     final dados = movimentacao.toMap();
     dados.remove('id');
 
-    final quantidade = await db.update(
-      'movimentacoes',
-      dados,
-      where: 'id = ?',
-      whereArgs: [movimentacao.id],
-    );
-    if (quantidade != 1) {
-      throw StateError('Esta movimentação não existe mais. Atualize a lista.');
-    }
-    return quantidade;
+    return db.transaction((txn) async {
+      await _validarVinculos(txn, movimentacao);
+      final quantidade = await txn.update(
+        'movimentacoes',
+        dados,
+        where: 'id = ?',
+        whereArgs: [movimentacao.id],
+      );
+      if (quantidade != 1) {
+        throw StateError(
+          'Esta movimentação não existe mais. Atualize a lista.',
+        );
+      }
+      return quantidade;
+    });
   }
 
   Future<int> excluir(int id) async {
@@ -995,4 +1036,3 @@ class BancoDados {
     });
   }
 }
-

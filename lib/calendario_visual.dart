@@ -44,9 +44,7 @@ class _ResumoCalendario extends StatelessWidget {
       decoration: BoxDecoration(
         color: cores.surfaceContainerLow,
         borderRadius: BorderRadius.circular(RaioBorda.cartao),
-        border: Border.all(
-          color: cores.outlineVariant.withValues(alpha: 0.65),
-        ),
+        border: Border.all(color: cores.outlineVariant.withValues(alpha: 0.65)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -220,7 +218,8 @@ class _IconeCategoriaCalendario extends StatelessWidget {
   Widget build(BuildContext context) {
     final semantica = CoresSemanticas.de(context);
     final cor =
-        categoria?.cor ?? (item.receita ? semantica.receita : semantica.despesa);
+        categoria?.cor ??
+        (item.receita ? semantica.receita : semantica.despesa);
     return Container(
       width: tamanho,
       height: tamanho,
@@ -300,9 +299,7 @@ class _CompromissoDiaCalendario extends StatelessWidget {
         color: cores.surfaceContainerLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(RaioBorda.md),
-          side: BorderSide(
-            color: cores.outlineVariant.withValues(alpha: 0.55),
-          ),
+          side: BorderSide(color: cores.outlineVariant.withValues(alpha: 0.55)),
         ),
         child: InkWell(
           onTap: onDetalhes,
@@ -440,7 +437,9 @@ class _CompromissoDiaCalendario extends StatelessWidget {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: Text(
-                                item.receita ? 'Marcar recebido' : 'Marcar pago',
+                                item.receita
+                                    ? 'Marcar recebido'
+                                    : 'Marcar pago',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -558,9 +557,7 @@ class _VencimentoCalendario extends StatelessWidget {
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: corValor,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures(),
-                            ],
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                     ],

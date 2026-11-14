@@ -1,4 +1,5 @@
-import '../importacao/validacao.dart';
+import '../modelos/data_registro.dart';
+import '../modelos/dinheiro.dart';
 import '../modelos/contabilizacao.dart';
 
 String dataIso(DateTime d) =>
@@ -6,12 +7,12 @@ String dataIso(DateTime d) =>
 String dataBr(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 String moeda(int centavos) {
-  final partes = (centavos.abs() / 100).toStringAsFixed(2).split('.');
-  final inteiro = partes[0].replaceAllMapped(
+  final absoluto = centavos.abs();
+  final inteiro = (absoluto ~/ 100).toString().replaceAllMapped(
     RegExp(r'(\d)(?=(\d{3})+$)'),
     (m) => '${m[1]}.',
   );
-  return '${centavos < 0 ? '-' : ''}R\$ $inteiro,${partes[1]}';
+  return '${centavos < 0 ? '-' : ''}R\$ $inteiro,${(absoluto % 100).toString().padLeft(2, '0')}';
 }
 
 class FiltroRelatorio {
@@ -39,7 +40,11 @@ class FiltroRelatorio {
       (categoria == null || l.categoria == categoria) &&
       (origem == 'ambos' || (origem == 'agenda') == l.prevista);
   String get periodo => inicio == null
-      ? 'Todo o período'
+      ? fim == null
+            ? 'Todo o período'
+            : 'Até ${dataBr(fim!)}'
+      : fim == null
+      ? 'A partir de ${dataBr(inicio!)}'
       : '${dataBr(inicio!)} a ${dataBr(fim!)}';
   String get descricao => [
     periodo,
@@ -64,15 +69,25 @@ class LinhaRelatorio {
     required this.dados,
     this.prevista = false,
   }) {
+    if (!{'receita', 'despesa'}.contains(dados['tipo'])) {
+      throw const FormatException('Tipo financeiro inválido.');
+    }
     final valor = dados[prevista ? 'centavos' : 'valor'];
-    if (valor is! num || !valor.isFinite) {
+    if (valor is! num ||
+        !valor.isFinite ||
+        valor < 0 ||
+        (prevista &&
+            (valor != valor.roundToDouble() || valor > maximoCentavosExatos))) {
       throw const FormatException('Valor financeiro inválido.');
     }
-    centavos = prevista ? valor.round() : (valor * 100).round();
+    try {
+      centavos = prevista ? valor.toInt() : centavosDeValor(valor);
+    } on ArgumentError {
+      throw const FormatException('Valor financeiro inválido.');
+    }
     final textoData = (dados['data'] ?? '').toString();
     data =
-        DateTime.tryParse(textoData) ??
-        dataCsv(textoData) ??
+        dataRegistro(textoData) ??
         (throw const FormatException('Data inválida no registro.'));
   }
   final String perfil;
@@ -196,7 +211,7 @@ class DadosRelatorio {
   String nomeArquivo(String extensao) {
     final periodo = filtro.inicio == null
         ? 'todo_periodo'
-        : '${dataIso(filtro.inicio!)}_${dataIso(filtro.fim!)}';
+        : '${dataIso(filtro.inicio!)}_${filtro.fim == null ? 'sem_fim' : dataIso(filtro.fim!)}';
     return '${extensao == 'pdf' ? 'relatorio_' : ''}financas_facil_${periodo}_${geradoEm.microsecondsSinceEpoch}.$extensao';
   }
 }

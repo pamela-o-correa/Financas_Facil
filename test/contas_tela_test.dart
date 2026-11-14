@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:financas_facil/contas/contas_banco.dart';
 import 'package:financas_facil/contas/tela_contas.dart';
@@ -166,9 +166,7 @@ void main() {
   ) async {
     final banco = BancoTeste();
     await tester.pumpWidget(
-      MaterialApp(
-        home: TelaRelatorioBancos(banco: banco),
-      ),
+      MaterialApp(home: TelaRelatorioBancos(banco: banco)),
     );
     await tester.pumpAndSettle();
     expect(find.text('Nubank'), findsOneWidget);

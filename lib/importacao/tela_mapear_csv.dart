@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'motor_importacao.dart';
 
@@ -153,7 +153,9 @@ class _TelaMapearCsvState extends State<TelaMapearCsv> {
           DropdownButtonFormField<String>(
             isExpanded: true,
             initialValue: _separador,
-            decoration: const InputDecoration(labelText: 'Separador de colunas'),
+            decoration: const InputDecoration(
+              labelText: 'Separador de colunas',
+            ),
             items: const [
               DropdownMenuItem(value: ';', child: Text('Ponto e vírgula ;')),
               DropdownMenuItem(value: ',', child: Text('Vírgula ,')),
@@ -162,7 +164,10 @@ class _TelaMapearCsvState extends State<TelaMapearCsv> {
             ],
             onChanged: (v) {
               try {
-                final doc = DocumentoCsv.detectar(widget.conteudo, separador: v);
+                final doc = DocumentoCsv.detectar(
+                  widget.conteudo,
+                  separador: v,
+                );
                 setState(() {
                   _separador = v!;
                   _doc = doc;

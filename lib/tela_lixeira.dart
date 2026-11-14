@@ -10,39 +10,109 @@ class TelaLixeira extends StatefulWidget {
 class _TelaLixeiraState extends State<TelaLixeira> {
   late Future<List<Map<String, Object?>>> _consulta = widget.banco.listar();
   bool _ocupado = false;
-  void _recarregar() { final consulta = widget.banco.listar(); setState(() { _consulta = consulta; }); }
+  void _recarregar() {
+    final consulta = widget.banco.listar();
+    setState(() {
+      _consulta = consulta;
+    });
+  }
+
   Future<void> _recuperar(int id) async {
     await _executar(() async {
-      try { await widget.banco.restaurar(id); }
-      on DuplicataNaRecuperacao {
+      try {
+        await widget.banco.restaurar(id);
+      } on DuplicataNaRecuperacao {
         if (!mounted) return;
-        final sim = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-          title: const Text('Possível duplicata'),
-          content: const Text('Já existe um lançamento com a mesma data, valor, descrição e conta. Recuperar mesmo assim aumentará os totais novamente.'),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Recuperar mesmo assim'))]));
+        final sim = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Possível duplicata'),
+            content: const Text(
+              'Já existe um lançamento com a mesma data, valor, descrição e conta. Recuperar mesmo assim aumentará os totais novamente.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Recuperar mesmo assim'),
+              ),
+            ],
+          ),
+        );
         if (sim != true) return;
         await widget.banco.restaurar(id, permitirDuplicata: true);
       }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lançamento recuperado.')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Lançamento recuperado.')));
+      }
     });
   }
+
   Future<void> _apagar({int? id, String? descricao}) async {
-    final sim = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: Text(id == null ? 'Esvaziar lixeira?' : 'Apagar definitivamente?'),
-      content: Text(id == null ? 'Todos os lançamentos da lixeira deste perfil serão apagados. Esta ação não pode ser desfeita.' : '“$descricao” será apagado definitivamente. Esta ação não pode ser desfeita.'),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Apagar definitivamente'))]));
-    if (sim == true) await _executar(() => id == null ? widget.banco.esvaziar() : widget.banco.apagarDefinitivamente(id));
+    final sim = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          id == null ? 'Esvaziar lixeira?' : 'Apagar definitivamente?',
+        ),
+        content: Text(
+          id == null
+              ? 'Todos os lançamentos da lixeira deste perfil serão apagados. Esta ação não pode ser desfeita.'
+              : '“$descricao” será apagado definitivamente. Esta ação não pode ser desfeita.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Apagar definitivamente'),
+          ),
+        ],
+      ),
+    );
+    if (sim == true) {
+      await _executar(
+        () => id == null
+            ? widget.banco.esvaziar()
+            : widget.banco.apagarDefinitivamente(id),
+      );
+    }
   }
+
   Future<void> _executar(Future<void> Function() acao) async {
     if (_ocupado || !mounted) return;
-    setState(() { _ocupado = true; });
-    try { await acao(); }
-    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagemErroSegura(e)))); }
-    finally { if (mounted) { setState(() { _ocupado = false; }); _recarregar(); } }
+    setState(() {
+      _ocupado = true;
+    });
+    try {
+      await acao();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(mensagemErroSegura(e))));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _ocupado = false;
+        });
+        _recarregar();
+      }
+    }
   }
-  String _data(Object? valor) { final d = DateTime.parse(valor as String).toLocal(); return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}'; }
+
+  String _data(Object? valor) {
+    final d = DateTime.parse(valor as String).toLocal();
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final esquema = Theme.of(context).colorScheme;
@@ -80,7 +150,9 @@ class _TelaLixeiraState extends State<TelaLixeira> {
                           color: esquema.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(RaioBorda.cartao),
                           border: Border.all(
-                            color: esquema.outlineVariant.withValues(alpha: 0.7),
+                            color: esquema.outlineVariant.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                         ),
                         child: Column(

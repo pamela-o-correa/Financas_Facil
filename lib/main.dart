@@ -5,25 +5,31 @@ import 'dart:math' as math;
 import 'importacao/leitor_extrato.dart';
 import 'importacao/item_extrato.dart';
 import 'importacao/tela_mapear_csv.dart';
+import 'importacao/leitura_limitada.dart';
+import 'importacao/analise_extrato.dart';
 import 'modelos/tipo_movimentacao.dart';
 import 'contas/contas_banco.dart';
 import 'contas/lixeira_banco.dart';
 import 'contas/tela_contas.dart';
 import 'exportacao/tela_exportacao.dart';
 import 'modelos/contabilizacao.dart';
+import 'modelos/data_registro.dart';
+import 'modelos/dinheiro.dart';
 export 'exportacao/tela_exportacao.dart';
 
 export 'importacao/item_extrato.dart';
 export 'importacao/leitor_extrato.dart';
 export 'modelos/tipo_movimentacao.dart';
+
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import 'perfis.dart';
+import 'backup/servico_backup.dart';
+import 'backup/tela_backup.dart';
 
 part 'persistencia/banco_dados.dart';
 part 'design_system.dart';
@@ -85,20 +91,20 @@ Future<void> alterarOcultarValores(bool ocultar) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(const InicializacaoApp());
+}
+
+Future<void> inicializarAplicativo() async {
   await CadastroPerfis.inicializar();
 
-  final modoSalvo = await BancoDados.instancia.lerPreferencia(
-    'modo_tema',
-  );
+  final modoSalvo = await BancoDados.instancia.lerPreferencia('modo_tema');
 
   modoTema.value = ThemeMode.values.firstWhere(
     (modo) => modo.name == modoSalvo,
     orElse: () => ThemeMode.system,
   );
 
-  final corSalva = await BancoDados.instancia.lerPreferencia(
-    'cor_tema',
-  );
+  final corSalva = await BancoDados.instancia.lerPreferencia('cor_tema');
 
   corTema.value = normalizarNomeTema(corSalva);
 
@@ -107,19 +113,68 @@ Future<void> main() async {
   );
   ocultarValores.value = ocultarSalvo == '1';
 
-  final tamanhoSalvo = await BancoDados.instancia.lerPreferencia('tamanho_texto');
+  final tamanhoSalvo = await BancoDados.instancia.lerPreferencia(
+    'tamanho_texto',
+  );
   tamanhoTexto.value = tamanhosTexto.containsKey(tamanhoSalvo)
       ? tamanhoSalvo!
       : 'Padrão';
+}
 
-  runApp(const FinancasFacilApp());
+class InicializacaoApp extends StatefulWidget {
+  const InicializacaoApp({
+    super.key,
+    this.inicializar,
+    this.aplicativo = const FinancasFacilApp(),
+  });
+  final Future<void> Function()? inicializar;
+  final Widget aplicativo;
+  @override
+  State<InicializacaoApp> createState() => _InicializacaoAppState();
+}
+
+class _InicializacaoAppState extends State<InicializacaoApp> {
+  late Future<void> _abertura = (widget.inicializar ?? inicializarAplicativo)();
+  @override
+  Widget build(BuildContext context) => FutureBuilder<void>(
+    future: _abertura,
+    builder: (context, estado) {
+      if (estado.connectionState == ConnectionState.done && !estado.hasError) {
+        return widget.aplicativo;
+      }
+      return MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: estado.hasError
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'Não foi possível abrir seus dados. Tente novamente. Nenhum dado foi apagado.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      FilledButton(
+                        onPressed: () => setState(() {
+                          _abertura =
+                              (widget.inicializar ?? inicializarAplicativo)();
+                        }),
+                        child: const Text('Tentar novamente'),
+                      ),
+                    ],
+                  )
+                : const CircularProgressIndicator(),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 Future<void> alterarModoTema(ThemeMode modo) async {
-  await BancoDados.instancia.salvarPreferencia(
-    'modo_tema',
-    modo.name,
-  );
+  await BancoDados.instancia.salvarPreferencia('modo_tema', modo.name);
 
   modoTema.value = modo;
 }
@@ -130,10 +185,7 @@ Future<void> alterarCorTema(String nome) async {
   }
   final normalizado = normalizarNomeTema(nome);
 
-  await BancoDados.instancia.salvarPreferencia(
-    'cor_tema',
-    normalizado,
-  );
+  await BancoDados.instancia.salvarPreferencia('cor_tema', normalizado);
 
   corTema.value = normalizado;
 }
@@ -168,20 +220,12 @@ class DataBrInputFormatter extends TextInputFormatter {
 
     return TextEditingValue(
       text: texto,
-      selection: TextSelection.collapsed(
-        offset: texto.length,
-      ),
+      selection: TextSelection.collapsed(offset: texto.length),
     );
   }
 }
 
-enum PeriodoFiltro {
-  esteMes,
-  mesPassado,
-  esteAno,
-  todos,
-  personalizado,
-}
+enum PeriodoFiltro { esteMes, mesPassado, esteAno, todos, personalizado }
 
 class Categoria {
   final int? id;
@@ -225,7 +269,8 @@ class Categoria {
   }
 
   static final _iconesPorCodigo = <int, IconData>{
-    Icons.account_balance_wallet_outlined.codePoint: Icons.account_balance_wallet_outlined,
+    Icons.account_balance_wallet_outlined.codePoint:
+        Icons.account_balance_wallet_outlined,
     Icons.add.codePoint: Icons.add,
     Icons.add_circle_outline.codePoint: Icons.add_circle_outline,
     Icons.arrow_downward.codePoint: Icons.arrow_downward,
@@ -254,7 +299,8 @@ class Categoria {
     Icons.file_download_done.codePoint: Icons.file_download_done,
     Icons.filter_list.codePoint: Icons.filter_list,
     Icons.flight_outlined.codePoint: Icons.flight_outlined,
-    Icons.health_and_safety_outlined.codePoint: Icons.health_and_safety_outlined,
+    Icons.health_and_safety_outlined.codePoint:
+        Icons.health_and_safety_outlined,
     Icons.home.codePoint: Icons.home,
     Icons.home_outlined.codePoint: Icons.home_outlined,
     Icons.info_outline.codePoint: Icons.info_outline,
@@ -289,7 +335,8 @@ class Categoria {
     Icons.work_outline.codePoint: Icons.work_outline,
   };
 
-  IconData get icone => _iconesPorCodigo[codigoIcone] ?? Icons.category_outlined;
+  IconData get icone =>
+      _iconesPorCodigo[codigoIcone] ?? Icons.category_outlined;
 
   Color get cor => Color(codigoCor);
 }
@@ -330,8 +377,9 @@ class Movimentacao {
   final String? conta;
   final String? observacoes;
   final bool ativa;
-  int get centavos => (valor * 100).round();
-  bool get contabilizavel => deveContabilizar(ativa: ativa, transferencia: transferencia);
+  int get centavos => centavosDeValor(valor);
+  bool get contabilizavel =>
+      deveContabilizar(ativa: ativa, transferencia: transferencia);
   final int? transferenciaPar;
   bool get transferencia => transferenciaPar != null;
 
@@ -352,6 +400,9 @@ class Movimentacao {
   }
 
   factory Movimentacao.fromMap(Map<String, dynamic> map) {
+    if (!{'receita', 'despesa'}.contains(map['tipo'])) {
+      throw const FormatException('Tipo inválido na movimentação.');
+    }
     return Movimentacao(
       id: map['id'] as int?,
       tipo: map['tipo'] == 'receita'
@@ -360,7 +411,9 @@ class Movimentacao {
       valor: (map['valor'] as num).toDouble(),
       categoria: map['categoria'] as String,
       descricao: map['descricao'] as String,
-      data: DateTime.parse(map['data'] as String),
+      data:
+          dataRegistro(map['data'] as String) ??
+          (throw const FormatException('Data inválida na movimentação.')),
       contaId: map['conta_id'] as int?,
       importacaoId: map['importacao_id'] as int?,
       transferenciaPar: map['transferencia_par'] as int?,
@@ -425,10 +478,8 @@ class ResumoMes {
 class FinancasFacilApp extends StatelessWidget {
   const FinancasFacilApp({super.key});
 
-  ThemeData _criarTema(Brightness brilho) => construirTemaPremium(
-    nomeTema: corTema.value,
-    brilhoSolicitado: brilho,
-  );
+  ThemeData _criarTema(Brightness brilho) =>
+      construirTemaPremium(nomeTema: corTema.value, brilhoSolicitado: brilho);
 
   @override
   Widget build(BuildContext context) {
@@ -447,14 +498,8 @@ class FinancasFacilApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Finanças Fácil',
           locale: const Locale('pt', 'BR'),
-          supportedLocales: const [
-            Locale('pt', 'BR'),
-          ],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
+          supportedLocales: const [Locale('pt', 'BR')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
           theme: _criarTema(Brightness.light),
           darkTheme: _criarTema(Brightness.dark),
           themeMode: modoEfetivo,
@@ -531,31 +576,32 @@ class _TelaPrincipalState extends State<TelaPrincipal> {
 
   List<Categoria> _categoriasBanco = [];
 
-
   @override
   void initState() {
-  super.initState();
-  _carregarMovimentacoes();
-  _carregarCategoriasBanco();
-}
+    super.initState();
+    _carregarMovimentacoes();
+    _carregarCategoriasBanco();
+  }
 
   // ==========================================================
   // BANCO
   // ==========================================================
 
-Future<void> _carregarCategoriasBanco() async {
-  final consulta = ++_consultaCategorias;
-  try {
-    final dados = await _banco.listarCategorias();
-    if (!mounted || consulta != _consultaCategorias) return;
-    setState(() {
-      _categoriasBanco = dados;
-      categorias = dados.map((categoria) => categoria.nome).toSet().toList();
-    });
-  } catch (_) {
-    if (mounted && consulta == _consultaCategorias) _mostrarErro('Não foi possível carregar as categorias.');
+  Future<void> _carregarCategoriasBanco() async {
+    final consulta = ++_consultaCategorias;
+    try {
+      final dados = await _banco.listarCategorias();
+      if (!mounted || consulta != _consultaCategorias) return;
+      setState(() {
+        _categoriasBanco = dados;
+        categorias = dados.map((categoria) => categoria.nome).toSet().toList();
+      });
+    } catch (_) {
+      if (mounted && consulta == _consultaCategorias) {
+        _mostrarErro('Não foi possível carregar as categorias.');
+      }
+    }
   }
-}
 
   Future<void> _carregarMovimentacoes() async {
     final consulta = ++_consultaMovimentos;
@@ -589,20 +635,16 @@ Future<void> _carregarCategoriasBanco() async {
     }
   }
 
-  Future<void> _adicionarMovimentacao(
-    Movimentacao movimentacao,
-  ) async {
+  Future<void> _adicionarMovimentacao(Movimentacao movimentacao) async {
     try {
       await _banco.inserir(movimentacao);
       await _carregarMovimentacoes();
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Movimentação adicionada.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Movimentação adicionada.')));
     } catch (erro) {
       if (!mounted) return;
 
@@ -610,20 +652,16 @@ Future<void> _carregarCategoriasBanco() async {
     }
   }
 
-  Future<void> _atualizarMovimentacao(
-    Movimentacao movimentacao,
-  ) async {
+  Future<void> _atualizarMovimentacao(Movimentacao movimentacao) async {
     try {
       await _banco.atualizar(movimentacao);
       await _carregarMovimentacoes();
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Movimentação atualizada.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Movimentação atualizada.')));
     } catch (erro) {
       if (!mounted) return;
 
@@ -641,90 +679,147 @@ Future<void> _carregarCategoriasBanco() async {
     _importandoExtrato = true;
     final bancoAtual = _banco;
     try {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => TelaCentralImportacao(
-        banco: bancoAtual, processar: (arquivo, conta) => _processarArquivo(arquivo, conta, bancoAtual))));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TelaCentralImportacao(
+            banco: bancoAtual,
+            processar: (arquivo, conta) =>
+                _processarArquivo(arquivo, conta, bancoAtual),
+          ),
+        ),
+      );
     } finally {
       _importandoExtrato = false;
       if (mounted) await _carregarMovimentacoes();
     }
   }
 
-  Future<ResultadoArquivoImportado?> _processarArquivo(PlatformFile arquivo, ContaOrigem conta, BancoDados bancoAtual) async {
-      final bytes = await arquivo.readAsBytes();
-      if (bytes.length > 10 * 1024 * 1024) {
-        throw const FormatException(
-          'O arquivo selecionado excede o limite de 10 MB.',
+  Future<ResultadoArquivoImportado?> _processarArquivo(
+    PlatformFile arquivo,
+    ContaOrigem conta,
+    BancoDados bancoAtual,
+  ) async {
+    if ((arquivo.lengthSync() ?? 0) > limiteArquivoCsv) {
+      throw const FormatException(
+        'O arquivo selecionado excede o limite de 10 MB.',
+      );
+    }
+    final bytes = await lerBytesLimitados(arquivo.readAsByteStream());
+    final conteudo = MotorImportacao.decodificar(bytes);
+    final categorias = await bancoAtual.nomesCategoriasCsv();
+    final contas = ContasBanco(bancoAtual.database);
+    var resultado = await analisarExtrato(conteudo, categorias);
+
+    var mapear = resultado.precisaMapear;
+    while (mounted) {
+      if (!mounted) return null;
+      if (mapear) {
+        final configuracao = await Navigator.push<ConfiguracaoCsv>(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                TelaMapearCsv(conteudo: conteudo, resultado: resultado),
+          ),
+        );
+        if (configuracao == null || !mounted) return null;
+        try {
+          resultado = await analisarExtrato(
+            conteudo,
+            categorias,
+            separador: configuracao.separador,
+            mapeamento: configuracao.mapa,
+          );
+        } on FormatException catch (e) {
+          _mostrarErro(e.message);
+          continue;
+        }
+        mapear = resultado.precisaMapear;
+        if (mapear) continue;
+      }
+      if (!mounted) return null;
+      if (resultado.itens.isEmpty) {
+        final motivos = resultado.ocorrencias
+            .take(8)
+            .map((o) => 'Linha ${o.linha}: ${o.motivo}')
+            .join('\n');
+        final ajustar = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Nenhuma movimentação válida'),
+            content: SingleChildScrollView(
+              child: Text(
+                '${resultado.banco.nome}\n\n'
+                '${resultado.ocorrencias.isEmpty ? "Este arquivo contém somente cabeçalho ou está vazio." : "${resultado.ocorrencias.length} linhas foram descartadas.\n$motivos"}',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Fechar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Ajustar colunas'),
+              ),
+            ],
+          ),
+        );
+        if (ajustar != true || !mounted) return null;
+        mapear = true;
+        continue;
+      }
+      if (resultado.banco.codigo != 'generico' &&
+          resultado.banco.codigo != conta.bancoCodigo) {
+        throw FormatException(
+          'O arquivo ${arquivo.name} pertence a outro banco. Selecione arquivos da mesma conta.',
         );
       }
-      final conteudo = MotorImportacao.decodificar(bytes);
-      final categorias = await bancoAtual.nomesCategoriasCsv();
-      final contas = ContasBanco(bancoAtual.database);
-      var resultado = MotorImportacao.ler(conteudo, categorias);
+      await bancoAtual.aplicarRegrasImportacao(resultado.itens);
+      await contas.identificarDuplicatas(resultado.itens, conta);
+      await PreferenciasContabilizacao(bancoAtual.database)
+          .sugerir(resultado.itens, conta);
+      if (!mounted) return null;
 
-      var mapear = resultado.precisaMapear;
-      while (mounted) {
-        if (!mounted) return null;
-        if (mapear) {
-          final configuracao = await Navigator.push<ConfiguracaoCsv>(context,
-            MaterialPageRoute(builder: (_) => TelaMapearCsv(conteudo: conteudo, resultado: resultado)));
-          if (configuracao == null || !mounted) return null;
-          try {
-            resultado = MotorImportacao.ler(conteudo, categorias,
-              separador: configuracao.separador, mapeamento: configuracao.mapa);
-
-          } on FormatException catch (e) {
-            _mostrarErro(e.message); continue;
-          }
-          mapear = resultado.precisaMapear;
-          if (mapear) continue;
-        }
-        if (resultado.itens.isEmpty) {
-          final motivos = resultado.ocorrencias.take(8).map((o) => 'Linha ${o.linha}: ${o.motivo}').join('\n');
-          final ajustar = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-            title: const Text('Nenhuma movimentação válida'),
-            content: SingleChildScrollView(child: Text('${resultado.banco.nome}\n\n'
-              '${resultado.ocorrencias.isEmpty ? "Este arquivo contém somente cabeçalho ou está vazio." : "${resultado.ocorrencias.length} linhas foram descartadas.\n$motivos"}')),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Fechar')),
-              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Ajustar colunas'))]));
-          if (ajustar != true || !mounted) return null;
-          mapear = true; continue;
-        }
-        if (resultado.banco.codigo != 'generico' && resultado.banco.codigo != conta.bancoCodigo) {
-          throw FormatException('O arquivo ${arquivo.name} pertence a outro banco. Selecione arquivos da mesma conta.');
-        }
-        await bancoAtual.aplicarRegrasImportacao(resultado.itens);
-        await contas.identificarDuplicatas(resultado.itens, conta);
-        await PreferenciasContabilizacao(bancoAtual.database).sugerir(resultado.itens, conta);
-        if (!mounted) return null;
-
-        final selecionados = await Navigator.push<List<ItemExtrato>>(context,
-          MaterialPageRoute(builder: (_) => TelaRevisaoExtrato(nomeArquivo: arquivo.name, itens: resultado.itens,
-            categorias: _categoriasBanco, resultado: resultado, conta: conta)));
-        if (selecionados == null || !mounted) {
-         return null;
-        }
-
-        if (selecionados.isEmpty) {
-          _mostrarErro(
-          'Selecione pelo menos uma movimentação para importar.',
-           );
-           continue;
-        }
-        await bancoAtual.inserirImportacao(nomeArquivo: arquivo.name, itens: selecionados,
-          conta: conta, bancoDetectado: resultado.banco.codigo);
-        return ResultadoArquivoImportado(selecionados.length,
-          resultado.itens.where((i) => i.possivelDuplicata).length, resultado.ocorrencias.length);
+      final selecionados = await Navigator.push<List<ItemExtrato>>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TelaRevisaoExtrato(
+            nomeArquivo: arquivo.name,
+            itens: resultado.itens,
+            categorias: _categoriasBanco,
+            resultado: resultado,
+            conta: conta,
+          ),
+        ),
+      );
+      if (selecionados == null || !mounted) {
+        return null;
       }
-      return null;
+
+      if (selecionados.isEmpty) {
+        _mostrarErro('Selecione pelo menos uma movimentação para importar.');
+        continue;
+      }
+      await bancoAtual.inserirImportacao(
+        nomeArquivo: arquivo.name,
+        itens: selecionados,
+        conta: conta,
+        bancoDetectado: resultado.banco.codigo,
+      );
+      return ResultadoArquivoImportado(
+        selecionados.length,
+        resultado.itens.where((i) => i.possivelDuplicata).length,
+        resultado.ocorrencias.length,
+      );
+    }
+    return null;
   }
 
   void _mostrarErro(String mensagem) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensagem),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(mensagem)));
   }
 
   // ==========================================================
@@ -732,23 +827,11 @@ Future<void> _carregarCategoriasBanco() async {
   // ==========================================================
 
   DateTime _inicioDoDia(DateTime data) {
-    return DateTime(
-      data.year,
-      data.month,
-      data.day,
-    );
+    return DateTime(data.year, data.month, data.day);
   }
 
   DateTime _fimDoDia(DateTime data) {
-    return DateTime(
-      data.year,
-      data.month,
-      data.day,
-      23,
-      59,
-      59,
-      999,
-    );
+    return DateTime(data.year, data.month, data.day, 23, 59, 59, 999);
   }
 
   bool _estaNoPeriodo(DateTime data) {
@@ -759,59 +842,23 @@ Future<void> _carregarCategoriasBanco() async {
 
     switch (_periodoFiltro) {
       case PeriodoFiltro.esteMes:
-        inicio = DateTime(
-          hoje.year,
-          hoje.month,
-          1,
-        );
+        inicio = DateTime(hoje.year, hoje.month, 1);
 
-        fim = DateTime(
-          hoje.year,
-          hoje.month + 1,
-          0,
-          23,
-          59,
-          59,
-          999,
-        );
+        fim = DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59, 999);
 
         break;
 
       case PeriodoFiltro.mesPassado:
-        inicio = DateTime(
-          hoje.year,
-          hoje.month - 1,
-          1,
-        );
+        inicio = DateTime(hoje.year, hoje.month - 1, 1);
 
-        fim = DateTime(
-          hoje.year,
-          hoje.month,
-          0,
-          23,
-          59,
-          59,
-          999,
-        );
+        fim = DateTime(hoje.year, hoje.month, 0, 23, 59, 59, 999);
 
         break;
 
       case PeriodoFiltro.esteAno:
-        inicio = DateTime(
-          hoje.year,
-          1,
-          1,
-        );
+        inicio = DateTime(hoje.year, 1, 1);
 
-        fim = DateTime(
-          hoje.year,
-          12,
-          31,
-          23,
-          59,
-          59,
-          999,
-        );
+        fim = DateTime(hoje.year, 12, 31, 23, 59, 59, 999);
 
         break;
 
@@ -819,31 +866,23 @@ Future<void> _carregarCategoriasBanco() async {
         return true;
 
       case PeriodoFiltro.personalizado:
-        if (_inicioPersonalizado == null ||
-            _fimPersonalizado == null) {
+        if (_inicioPersonalizado == null || _fimPersonalizado == null) {
           return true;
         }
 
-        inicio = _inicioDoDia(
-          _inicioPersonalizado!,
-        );
+        inicio = _inicioDoDia(_inicioPersonalizado!);
 
-        fim = _fimDoDia(
-          _fimPersonalizado!,
-        );
+        fim = _fimDoDia(_fimPersonalizado!);
 
         break;
     }
 
-    return !data.isBefore(inicio) &&
-        !data.isAfter(fim);
+    return !data.isBefore(inicio) && !data.isAfter(fim);
   }
 
   List<Movimentacao> get _movimentacoesPeriodo {
     final lista = _movimentacoes
-        .where(
-          (item) => _estaNoPeriodo(item.data),
-        )
+        .where((item) => _estaNoPeriodo(item.data))
         .toList();
 
     lista.sort((a, b) {
@@ -859,24 +898,47 @@ Future<void> _carregarCategoriasBanco() async {
     return lista;
   }
 
-  List<Movimentacao> get _movimentacoesFinanceirasPeriodo => _movimentacoesPeriodo.where((m) => m.contabilizavel).toList();
+  List<Movimentacao> get _movimentacoesFinanceirasPeriodo =>
+      _movimentacoesPeriodo.where((m) => m.contabilizavel).toList();
 
   DateTimeRange? get _intervaloAtual {
     final hoje = DateTime.now();
     switch (_periodoFiltro) {
-      case PeriodoFiltro.todos: return null;
-      case PeriodoFiltro.esteMes: return DateTimeRange(start: DateTime(hoje.year, hoje.month), end: DateTime(hoje.year, hoje.month + 1, 0));
-      case PeriodoFiltro.mesPassado: return DateTimeRange(start: DateTime(hoje.year, hoje.month - 1), end: DateTime(hoje.year, hoje.month, 0));
-      case PeriodoFiltro.esteAno: return DateTimeRange(start: DateTime(hoje.year), end: DateTime(hoje.year, 12, 31));
+      case PeriodoFiltro.todos:
+        return null;
+      case PeriodoFiltro.esteMes:
+        return DateTimeRange(
+          start: DateTime(hoje.year, hoje.month),
+          end: DateTime(hoje.year, hoje.month + 1, 0),
+        );
+      case PeriodoFiltro.mesPassado:
+        return DateTimeRange(
+          start: DateTime(hoje.year, hoje.month - 1),
+          end: DateTime(hoje.year, hoje.month, 0),
+        );
+      case PeriodoFiltro.esteAno:
+        return DateTimeRange(
+          start: DateTime(hoje.year),
+          end: DateTime(hoje.year, 12, 31),
+        );
       case PeriodoFiltro.personalizado:
-        if (_inicioPersonalizado == null || _fimPersonalizado == null) return null;
-        return DateTimeRange(start: _inicioDoDia(_inicioPersonalizado!), end: _inicioDoDia(_fimPersonalizado!));
+        if (_inicioPersonalizado == null || _fimPersonalizado == null) {
+          return null;
+        }
+        return DateTimeRange(
+          start: _inicioDoDia(_inicioPersonalizado!),
+          end: _inicioDoDia(_fimPersonalizado!),
+        );
     }
   }
+
   String get _periodoExplicito {
     final intervalo = _intervaloAtual;
-    return intervalo == null ? 'Todo o período' : '${_dataFormatada(intervalo.start)} a ${_dataFormatada(intervalo.end)}';
+    return intervalo == null
+        ? 'Todo o período'
+        : '${_dataFormatada(intervalo.start)} a ${_dataFormatada(intervalo.end)}';
   }
+
   void _mudarMes(int direcao) {
     final atual = _intervaloAtual;
     final base = atual?.start ?? DateTime.now();
@@ -887,257 +949,277 @@ Future<void> _carregarCategoriasBanco() async {
       _fimPersonalizado = DateTime(inicio.year, inicio.month + 1, 0);
     });
   }
-  Widget _periodoDoGrafico() => Row(children: [
-    IconButton(tooltip: 'Ver mês anterior', onPressed: () => _mudarMes(-1), icon: const Icon(Icons.chevron_left)),
-    Expanded(child: TextButton(onPressed: _abrirFiltroPeriodoHistorico, child: Text(_periodoExplicito, textAlign: TextAlign.center))),
-    IconButton(tooltip: 'Ver mês seguinte', onPressed: () => _mudarMes(1), icon: const Icon(Icons.chevron_right)),
-  ]);
+
+  Widget _periodoDoGrafico() => Row(
+    children: [
+      IconButton(
+        tooltip: 'Ver mês anterior',
+        onPressed: () => _mudarMes(-1),
+        icon: const Icon(Icons.chevron_left),
+      ),
+      Expanded(
+        child: TextButton(
+          onPressed: _abrirFiltroPeriodoHistorico,
+          child: Text(_periodoExplicito, textAlign: TextAlign.center),
+        ),
+      ),
+      IconButton(
+        tooltip: 'Ver mês seguinte',
+        onPressed: () => _mudarMes(1),
+        icon: const Icon(Icons.chevron_right),
+      ),
+    ],
+  );
   Future<void> _abrirRevisaoFinanceira(bool transferencias) async {
     final intervalo = _intervaloAtual;
-    bool noPeriodo(DateTime data) => intervalo == null || (!data.isBefore(intervalo.start) && data.isBefore(DateTime(intervalo.end.year, intervalo.end.month, intervalo.end.day + 1)));
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => transferencias
-      ? TelaTransferencias(banco: _banco, periodo: _periodoExplicito, noPeriodo: noPeriodo)
-      : TelaRevisarCategorias(banco: _banco, periodo: _periodoExplicito, noPeriodo: noPeriodo)));
+    bool noPeriodo(DateTime data) =>
+        intervalo == null ||
+        (!data.isBefore(intervalo.start) &&
+            data.isBefore(
+              DateTime(
+                intervalo.end.year,
+                intervalo.end.month,
+                intervalo.end.day + 1,
+              ),
+            ));
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => transferencias
+            ? TelaTransferencias(
+                banco: _banco,
+                periodo: _periodoExplicito,
+                noPeriodo: noPeriodo,
+              )
+            : TelaRevisarCategorias(
+                banco: _banco,
+                periodo: _periodoExplicito,
+                noPeriodo: noPeriodo,
+              ),
+      ),
+    );
     if (mounted) await _carregarMovimentacoes();
   }
-  Widget _acoesRevisao() => Wrap(spacing: 8, runSpacing: 4, children: [
-    OutlinedButton.icon(onPressed: () => _abrirRevisaoFinanceira(false), icon: const Icon(Icons.category_outlined), label: const Text('Revisar categorias')),
-    OutlinedButton.icon(onPressed: () => _abrirRevisaoFinanceira(true), icon: const Icon(Icons.swap_horiz), label: const Text('Transferências entre contas')),
-  ]);
+
+  Widget _acoesRevisao() => Wrap(
+    spacing: 8,
+    runSpacing: 4,
+    children: [
+      OutlinedButton.icon(
+        onPressed: () => _abrirRevisaoFinanceira(false),
+        icon: const Icon(Icons.category_outlined),
+        label: const Text('Revisar categorias'),
+      ),
+      OutlinedButton.icon(
+        onPressed: () => _abrirRevisaoFinanceira(true),
+        icon: const Icon(Icons.swap_horiz),
+        label: const Text('Transferências entre contas'),
+      ),
+    ],
+  );
 
   Future<void> _selecionarPeriodoPersonalizado() async {
-  final agora = DateTime.now();
+    final agora = DateTime.now();
 
-  final inicioController = TextEditingController(
-    text: _inicioPersonalizado != null
-        ? _dataFormatada(_inicioPersonalizado!)
-        : '01/${agora.month.toString().padLeft(2, '0')}/${agora.year}',
-  );
+    final inicioController = TextEditingController(
+      text: _inicioPersonalizado != null
+          ? _dataFormatada(_inicioPersonalizado!)
+          : '01/${agora.month.toString().padLeft(2, '0')}/${agora.year}',
+    );
 
-  final fimController = TextEditingController(
-    text: _fimPersonalizado != null
-        ? _dataFormatada(_fimPersonalizado!)
-        : _dataFormatada(agora),
-  );
+    final fimController = TextEditingController(
+      text: _fimPersonalizado != null
+          ? _dataFormatada(_fimPersonalizado!)
+          : _dataFormatada(agora),
+    );
 
-  DateTime? converterData(String texto) {
-    final partes = texto.split('/');
+    DateTime? converterData(String texto) {
+      final partes = texto.split('/');
 
-    if (partes.length != 3) {
-      return null;
+      if (partes.length != 3) {
+        return null;
+      }
+
+      final dia = int.tryParse(partes[0]);
+      final mes = int.tryParse(partes[1]);
+      final ano = int.tryParse(partes[2]);
+
+      if (dia == null || mes == null || ano == null) {
+        return null;
+      }
+
+      if (ano < 1900 || ano > 2100) {
+        return null;
+      }
+
+      final data = DateTime(ano, mes, dia);
+
+      if (data.day != dia || data.month != mes || data.year != ano) {
+        return null;
+      }
+
+      return data;
     }
 
-    final dia = int.tryParse(partes[0]);
-    final mes = int.tryParse(partes[1]);
-    final ano = int.tryParse(partes[2]);
+    final rota = DialogRoute<DateTimeRange>(
+      context: context,
+      builder: (dialogContext) {
+        String? mensagemErro;
 
-    if (dia == null || mes == null || ano == null) {
-      return null;
-    }
-
-    if (ano < 1900 || ano > 2100) {
-      return null;
-    }
-
-    final data = DateTime(ano, mes, dia);
-
-    if (data.day != dia ||
-        data.month != mes ||
-        data.year != ano) {
-      return null;
-    }
-
-    return data;
-  }
-
-  final rota = DialogRoute<DateTimeRange>(
-    context: context,
-    builder: (dialogContext) {
-      String? mensagemErro;
-
-      return StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return AlertDialog(
-            title: const Text('Selecionar período'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: inicioController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      DataBrInputFormatter(),
-                    ],
-                    decoration: const InputDecoration(
-                      labelText: 'Data inicial',
-                      hintText: 'DD/MM/AAAA',
-                      prefixIcon: Icon(
-                        Icons.calendar_today_outlined,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Selecionar período'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: inicioController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [DataBrInputFormatter()],
+                      decoration: const InputDecoration(
+                        labelText: 'Data inicial',
+                        hintText: 'DD/MM/AAAA',
+                        prefixIcon: Icon(Icons.calendar_today_outlined),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 14),
+                    const SizedBox(height: 14),
 
-                  TextField(
-                    controller: fimController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      DataBrInputFormatter(),
-                    ],
-                    decoration: const InputDecoration(
-                      labelText: 'Data final',
-                      hintText: 'DD/MM/AAAA',
-                      prefixIcon: Icon(
-                        Icons.calendar_today_outlined,
+                    TextField(
+                      controller: fimController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [DataBrInputFormatter()],
+                      decoration: const InputDecoration(
+                        labelText: 'Data final',
+                        hintText: 'DD/MM/AAAA',
+                        prefixIcon: Icon(Icons.calendar_today_outlined),
                       ),
                     ),
-                  ),
 
-                  if (mensagemErro != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      mensagemErro!,
-                      style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .error,
+                    if (mensagemErro != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        mensagemErro!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
+                    ],
+
+                    const SizedBox(height: 18),
+
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final atualInicio = converterData(
+                          inicioController.text,
+                        );
+
+                        final atualFim = converterData(fimController.text);
+
+                        final selecionado = await showDateRangePicker(
+                          context: context,
+                          locale: const Locale('pt', 'BR'),
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime(2100),
+                          initialDateRange:
+                              atualInicio != null &&
+                                  atualFim != null &&
+                                  !atualInicio.isAfter(atualFim)
+                              ? DateTimeRange(start: atualInicio, end: atualFim)
+                              : DateTimeRange(
+                                  start: DateTime(agora.year, agora.month, 1),
+                                  end: agora,
+                                ),
+                        );
+
+                        if (!context.mounted) return;
+
+                        if (selecionado != null) {
+                          inicioController.text = _dataFormatada(
+                            selecionado.start,
+                          );
+
+                          fimController.text = _dataFormatada(selecionado.end);
+
+                          setStateDialog(() {
+                            mensagemErro = null;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.date_range_outlined),
+                      label: const Text('Escolher no calendário'),
                     ),
                   ],
-
-                  const SizedBox(height: 18),
-
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final atualInicio =
-                          converterData(inicioController.text);
-
-                      final atualFim =
-                          converterData(fimController.text);
-
-                      final selecionado =
-                          await showDateRangePicker(
-                        context: context,
-                        locale: const Locale('pt', 'BR'),
-                        firstDate: DateTime(1900),
-                        lastDate: DateTime(2100),
-                        initialDateRange:
-                            atualInicio != null &&
-                                    atualFim != null &&
-                                    !atualInicio.isAfter(atualFim)
-                                ? DateTimeRange(
-                                    start: atualInicio,
-                                    end: atualFim,
-                                  )
-                                : DateTimeRange(
-                                    start: DateTime(
-                                      agora.year,
-                                      agora.month,
-                                      1,
-                                    ),
-                                    end: agora,
-                                  ),
-                      );
-
-                      if (!context.mounted) return;
-
-                      if (selecionado != null) {
-                        inicioController.text =
-                            _dataFormatada(
-                          selecionado.start,
-                        );
-
-                        fimController.text =
-                            _dataFormatada(
-                          selecionado.end,
-                        );
-
-                        setStateDialog(() {
-                          mensagemErro = null;
-                        });
-                      }
-                    },
-                    icon: const Icon(
-                      Icons.date_range_outlined,
-                    ),
-                    label: const Text(
-                      'Escolher no calendário',
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                },
-                child: const Text('Cancelar'),
-              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancelar'),
+                ),
 
-              FilledButton(
-                onPressed: () {
-                  final inicio =
-                      converterData(inicioController.text);
+                FilledButton(
+                  onPressed: () {
+                    final inicio = converterData(inicioController.text);
 
-                  final fim =
-                      converterData(fimController.text);
+                    final fim = converterData(fimController.text);
 
-                  if (inicio == null || fim == null) {
-                    setStateDialog(() {
-                      mensagemErro =
-                          'Digite datas válidas no formato DD/MM/AAAA.';
-                    });
+                    if (inicio == null || fim == null) {
+                      setStateDialog(() {
+                        mensagemErro =
+                            'Digite datas válidas no formato DD/MM/AAAA.';
+                      });
 
-                    return;
-                  }
+                      return;
+                    }
 
-                  if (inicio.isAfter(fim)) {
-                    setStateDialog(() {
-                      mensagemErro =
-                          'A data inicial não pode ser posterior à data final.';
-                    });
+                    if (inicio.isAfter(fim)) {
+                      setStateDialog(() {
+                        mensagemErro = 'A data inicial não pode ser posterior à data final.';
+                      });
 
-                    return;
-                  }
+                      return;
+                    }
 
-                  Navigator.pop(
-                    dialogContext,
-                    DateTimeRange(
-                      start: inicio,
-                      end: fim,
-                    ),
-                  );
-                },
-                child: const Text('Aplicar'),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
+                    Navigator.pop(
+                      dialogContext,
+                      DateTimeRange(start: inicio, end: fim),
+                    );
+                  },
+                  child: const Text('Aplicar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
 
-  final intervalo = await Navigator.of(context, rootNavigator: true).push(rota);
-  // Aguarda a remoção dos campos após a animação de saída.
-  await rota.completed;
+    final intervalo = await Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push(rota);
+    // Aguarda a remoção dos campos após a animação de saída.
+    await rota.completed;
 
-  inicioController.dispose();
-  fimController.dispose();
+    inicioController.dispose();
+    fimController.dispose();
 
-  if (intervalo == null || !mounted) {
-    return;
+    if (intervalo == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _inicioPersonalizado = intervalo.start;
+      _fimPersonalizado = intervalo.end;
+      _periodoFiltro = PeriodoFiltro.personalizado;
+    });
   }
-
-  setState(() {
-    _inicioPersonalizado = intervalo.start;
-    _fimPersonalizado = intervalo.end;
-    _periodoFiltro = PeriodoFiltro.personalizado;
-  });
-}
 
   String get _nomePeriodoAtual {
     switch (_periodoFiltro) {
@@ -1154,8 +1236,7 @@ Future<void> _carregarCategoriasBanco() async {
         return 'Todo o período';
 
       case PeriodoFiltro.personalizado:
-        if (_inicioPersonalizado == null ||
-            _fimPersonalizado == null) {
+        if (_inicioPersonalizado == null || _fimPersonalizado == null) {
           return 'Período';
         }
 
@@ -1166,107 +1247,84 @@ Future<void> _carregarCategoriasBanco() async {
   }
 
   Future<void> _abrirFiltroPeriodoHistorico() async {
-  final selecionado =
-      await showModalBottomSheet<PeriodoFiltro>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ListTile(
-              title: Text(
-                'Período',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
+    final selecionado = await showModalBottomSheet<PeriodoFiltro>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text(
+                  'Período',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
-            ),
 
-            ListTile(
-              title: const Text('Todo o período'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.todos,
-                );
-              },
-            ),
+              ListTile(
+                title: const Text('Todo o período'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.todos);
+                },
+              ),
 
-            ListTile(
-              title: const Text('Este mês'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.esteMes,
-                );
-              },
-            ),
+              ListTile(
+                title: const Text('Este mês'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.esteMes);
+                },
+              ),
 
-            ListTile(
-              title: const Text('Mês passado'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.mesPassado,
-                );
-              },
-            ),
+              ListTile(
+                title: const Text('Mês passado'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.mesPassado);
+                },
+              ),
 
-            ListTile(
-              title: const Text('Este ano'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.esteAno,
-                );
-              },
-            ),
+              ListTile(
+                title: const Text('Este ano'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.esteAno);
+                },
+              ),
 
-            ListTile(
-              title: const Text('Personalizado'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.personalizado,
-                );
-              },
-            ),
-          ],
-        ),
-      );
-    },
-  );
+              ListTile(
+                title: const Text('Personalizado'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.personalizado);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
 
-  if (selecionado == null || !mounted) {
-    return;
+    if (selecionado == null || !mounted) {
+      return;
+    }
+
+    if (selecionado == PeriodoFiltro.personalizado) {
+      await _selecionarPeriodoPersonalizado();
+      return;
+    }
+
+    setState(() {
+      _periodoFiltro = selecionado;
+      _inicioPersonalizado = null;
+      _fimPersonalizado = null;
+    });
   }
-
-  if (selecionado == PeriodoFiltro.personalizado) {
-    await _selecionarPeriodoPersonalizado();
-    return;
-  }
-
-  setState(() {
-    _periodoFiltro = selecionado;
-    _inicioPersonalizado = null;
-    _fimPersonalizado = null;
-  });
-}
 
   Widget _seletorPeriodo() {
-  return OutlinedButton.icon(
-    onPressed: _abrirFiltroPeriodoHistorico,
-    icon: const Icon(
-      Icons.date_range_outlined,
-      size: 18,
-    ),
-    label: Text(
-      _nomePeriodoAtual,
-    ),
-  );
-}
+    return OutlinedButton.icon(
+      onPressed: _abrirFiltroPeriodoHistorico,
+      icon: const Icon(Icons.date_range_outlined, size: 18),
+      label: Text(_nomePeriodoAtual),
+    );
+  }
 
   // ==========================================================
   // CÁLCULOS
@@ -1274,26 +1332,14 @@ Future<void> _carregarCategoriasBanco() async {
 
   int get _receitasCentavos {
     return _movimentacoesFinanceirasPeriodo
-        .where(
-          (item) =>
-              item.tipo == TipoMovimentacao.receita,
-        )
-        .fold<int>(
-          0,
-          (total, item) => total + item.centavos,
-        );
+        .where((item) => item.tipo == TipoMovimentacao.receita)
+        .fold<int>(0, (total, item) => total + item.centavos);
   }
 
   int get _despesasCentavos {
     return _movimentacoesFinanceirasPeriodo
-        .where(
-          (item) =>
-              item.tipo == TipoMovimentacao.despesa,
-        )
-        .fold<int>(
-          0,
-          (total, item) => total + item.centavos,
-        );
+        .where((item) => item.tipo == TipoMovimentacao.despesa)
+        .fold<int>(0, (total, item) => total + item.centavos);
   }
 
   double get _receitas => _receitasCentavos / 100;
@@ -1309,9 +1355,7 @@ Future<void> _carregarCategoriasBanco() async {
     final negativo = valor < 0;
     final absoluto = valor.abs();
 
-    final partes = absoluto
-        .toStringAsFixed(2)
-        .split('.');
+    final partes = absoluto.toStringAsFixed(2).split('.');
 
     final inteira = partes[0];
     final decimal = partes[1];
@@ -1323,8 +1367,7 @@ Future<void> _carregarCategoriasBanco() async {
 
       buffer.write(inteira[i]);
 
-      if (posicaoRestante > 1 &&
-          posicaoRestante % 3 == 1) {
+      if (posicaoRestante > 1 && posicaoRestante % 3 == 1) {
         buffer.write('.');
       }
     }
@@ -1335,10 +1378,12 @@ Future<void> _carregarCategoriasBanco() async {
 
   Future<void> _alternarOcultarValores() async {
     final novo = !ocultarValores.value;
-    ocultarValores.value = novo;
     try {
       await _banco.salvarPreferencia('ocultar_valores', novo ? '1' : '0');
-    } catch (_) {}
+      ocultarValores.value = novo;
+    } catch (_) {
+      if (mounted) _mostrarErro('Não foi possível salvar a preferência.');
+    }
   }
 
   String _dataFormatada(DateTime data) {
@@ -1348,8 +1393,12 @@ Future<void> _carregarCategoriasBanco() async {
   }
 
   List<Movimentacao> get _movimentacoesFiltradas => filtrarHistorico(
-    _movimentacoesPeriodo, pesquisa: _pesquisaHistorico,
-    tipo: _filtroTipo, categoria: _filtroCategoria, ativa: _filtroAtiva, contaId: _filtroContaHistorico,
+    _movimentacoesPeriodo,
+    pesquisa: _pesquisaHistorico,
+    tipo: _filtroTipo,
+    categoria: _filtroCategoria,
+    ativa: _filtroAtiva,
+    contaId: _filtroContaHistorico,
   );
 
   String get _rotuloContaHistorico {
@@ -1362,22 +1411,41 @@ Future<void> _carregarCategoriasBanco() async {
   }
 
   Future<void> _escolherContaHistorico() async {
-    final escolhida = await showModalBottomSheet<int>(context: context, isScrollControlled: true,
-      builder: (ctx) => SafeArea(child: SizedBox(height: MediaQuery.sizeOf(ctx).height * 0.6,
-        child: ListView(children: [
-          const ListTile(title: Text('Filtrar por conta')),
-          ListTile(title: const Text('Todas as contas'), selected: _filtroContaHistorico == null,
-            onTap: () => Navigator.pop(ctx, 0)),
-          ListTile(title: const Text('Sem conta identificada'), selected: _filtroContaHistorico == -1,
-            onTap: () => Navigator.pop(ctx, -1)),
-          for (final conta in _contasGrafico) ListTile(title: Text(conta.rotulo),
-            selected: conta.id == _filtroContaHistorico, onTap: () => Navigator.pop(ctx, conta.id)),
-        ]))));
+    final escolhida = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * 0.6,
+          child: ListView(
+            children: [
+              const ListTile(title: Text('Filtrar por conta')),
+              ListTile(
+                title: const Text('Todas as contas'),
+                selected: _filtroContaHistorico == null,
+                onTap: () => Navigator.pop(ctx, 0),
+              ),
+              ListTile(
+                title: const Text('Sem conta identificada'),
+                selected: _filtroContaHistorico == -1,
+                onTap: () => Navigator.pop(ctx, -1),
+              ),
+              for (final conta in _contasGrafico)
+                ListTile(
+                  title: Text(conta.rotulo),
+                  selected: conta.id == _filtroContaHistorico,
+                  onTap: () => Navigator.pop(ctx, conta.id),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
     if (mounted && escolhida != null) {
       setState(() {
-      _filtroContaHistorico = escolhida == 0 ? null : escolhida;
-      _selecionadasHistorico.clear();
-    });
+        _filtroContaHistorico = escolhida == 0 ? null : escolhida;
+        _selecionadasHistorico.clear();
+      });
     }
   }
 
@@ -1391,8 +1459,7 @@ Future<void> _carregarCategoriasBanco() async {
   }) async {
     if (_categoriasBanco.isEmpty) await _carregarCategoriasBanco();
     if (!mounted || _categoriasBanco.isEmpty) return;
-    final resultado =
-        await Navigator.push<Movimentacao>(
+    final resultado = await Navigator.push<Movimentacao>(
       context,
       MaterialPageRoute(
         builder: (_) => TelaFormulario(
@@ -1412,80 +1479,155 @@ Future<void> _carregarCategoriasBanco() async {
     }
   }
 
-  Future<MudancaPreferencia?> _oferecerPreferencia(Movimentacao item, bool ativa) async {
+  Future<MudancaPreferencia?> _oferecerPreferencia(
+    Movimentacao item,
+    bool ativa,
+  ) async {
     if (item.contaId == null || item.descricao.trim().isEmpty) return null;
     try {
       final repo = PreferenciasContabilizacao(_banco.database);
-      final nova = PreferenciaContabilizacao(contaId: item.contaId!, tipo: item.tipo,
-        descricao: item.descricao, ativa: ativa);
-      if ((await repo.listar()).any((r) => r.chave == nova.chave && r.ativa == ativa && r.habilitada)) return null;
+      final nova = PreferenciaContabilizacao(
+        contaId: item.contaId!,
+        tipo: item.tipo,
+        descricao: item.descricao,
+        ativa: ativa,
+      );
+      if ((await repo.listar()).any(
+        (r) => r.chave == nova.chave && r.ativa == ativa && r.habilitada,
+      )) {
+        return null;
+      }
       ContaOrigem? conta;
-      for (final c in _contasGrafico) { if (c.id == item.contaId) conta = c; }
+      for (final c in _contasGrafico) {
+        if (c.id == item.contaId) conta = c;
+      }
       if (!mounted || conta == null) return null;
-      final lembrar = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('Lembrar esta preferência?'),
-        content: SingleChildScrollView(child: Text(
-          'A movimentação foi ${ativa ? 'reativada' : 'desativada'}.\n\n'
-          'Deseja sugerir contabilização ${ativa ? 'ativa' : 'desativada'} para futuras importações com esta mesma descrição e tipo na conta ${conta!.rotulo}?\n\n'
-          '“${item.descricao}”\n\n'
-          'Você confirma cada sugestão na revisão do extrato. As preferências ficam em Configurações.',
-        )),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Só esta vez')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lembrar preferência')),
-        ],
-      ));
+      final lembrar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Lembrar esta preferência?'),
+          content: SingleChildScrollView(
+            child: Text(
+              'A movimentação foi ${ativa ? 'reativada' : 'desativada'}.\n\n'
+              'Deseja sugerir contabilização ${ativa ? 'ativa' : 'desativada'} para futuras importações com esta mesma descrição e tipo na conta ${conta!.rotulo}?\n\n'
+              '“${item.descricao}”\n\n'
+              'Você confirma cada sugestão na revisão do extrato. As preferências ficam em Configurações.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Só esta vez'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Lembrar preferência'),
+            ),
+          ],
+        ),
+      );
       if (lembrar == true) return await repo.salvar(nova);
     } catch (_) {
       if (mounted) {
-        await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('Preferência não salva'),
-        content: const Text('A movimentação foi alterada, mas não foi possível salvar a preferência. Tente novamente depois.'),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar'))],
-      ));
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Preferência não salva'),
+            content: const Text(
+              'A movimentação foi alterada, mas não foi possível salvar a preferência. Tente novamente depois.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Fechar'),
+              ),
+            ],
+          ),
+        );
       }
     }
     return null;
   }
 
   Future<void> _alternarContabilizacao(Movimentacao item) async {
-    if (item.id != null) await _aplicarAcaoHistorico({item.id!}, ativa: !item.ativa, lembrar: item);
+    if (item.id != null) {
+      await _aplicarAcaoHistorico(
+        {item.id!},
+        ativa: !item.ativa,
+        lembrar: item,
+      );
+    }
   }
 
-  Future<void> _aplicarAcaoHistorico(Set<int> ids, {bool? ativa, Categoria? categoria, bool excluir = false, Movimentacao? lembrar}) async {
+  Future<void> _aplicarAcaoHistorico(
+    Set<int> ids, {
+    bool? ativa,
+    Categoria? categoria,
+    bool excluir = false,
+    Movimentacao? lembrar,
+  }) async {
     if (!mounted || _ocupadoHistorico) return;
     setState(() => _ocupadoHistorico = true);
     try {
-      final alteracao = await AlteracaoHistorico.executar(await _banco.database, ids,
-        ativa: ativa, categoria: categoria, excluir: excluir);
+      final alteracao = await AlteracaoHistorico.executar(
+        await _banco.database,
+        ids,
+        ativa: ativa,
+        categoria: categoria,
+        excluir: excluir,
+      );
       if (!mounted) return;
       setState(() => _selecionadasHistorico.clear());
       await _carregarMovimentacoes();
       if (!mounted) return;
-      final mudancaPreferencia = lembrar == null ? null : await _oferecerPreferencia(lembrar, ativa!);
+      final mudancaPreferencia = lembrar == null
+          ? null
+          : await _oferecerPreferencia(lembrar, ativa!);
       if (!mounted) return;
-      final mensagem = excluir ? 'Movimentação excluída.' : categoria != null
-        ? '${ids.length} movimentações categorizadas.'
-        : ativa! ? 'Contabilização reativada.' : 'Contabilização desativada. Movimentações mantidas no histórico.';
+      final mensagem = excluir
+          ? 'Movimentação excluída.'
+          : categoria != null
+          ? '${ids.length} movimentações categorizadas.'
+          : ativa!
+          ? 'Contabilização reativada.'
+          : 'Contabilização desativada. Movimentações mantidas no histórico.';
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        duration: const Duration(seconds: 8), content: Text(mensagem),
-        action: SnackBarAction(label: 'Desfazer', onPressed: () async {
-          if (_ocupadoHistorico) return;
-          setState(() => _ocupadoHistorico = true);
-          try {
-            await alteracao.desfazer(junto: mudancaPreferencia?.desfazer);
-            await _carregarMovimentacoes();
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ação desfeita.')));
-          } catch (_) {
-            if (mounted) _mostrarErro('Não foi possível desfazer. Os registros podem ter sido alterados novamente.');
-          } finally {
-            if (mounted) setState(() => _ocupadoHistorico = false);
-          }
-        }),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(mensagem),
+          action: SnackBarAction(
+            label: 'Desfazer',
+            onPressed: () async {
+              if (_ocupadoHistorico) return;
+              setState(() => _ocupadoHistorico = true);
+              try {
+                await alteracao.desfazer(junto: mudancaPreferencia?.desfazer);
+                await _carregarMovimentacoes();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Ação desfeita.')),
+                  );
+                }
+              } catch (_) {
+                if (mounted) {
+                  _mostrarErro(
+                    'Não foi possível desfazer. Os registros podem ter sido alterados novamente.',
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _ocupadoHistorico = false);
+              }
+            },
+          ),
+        ),
+      );
     } catch (_) {
-      if (mounted) _mostrarErro('Não foi possível concluir a ação. Atualize o histórico e tente novamente.');
+      if (mounted) {
+        _mostrarErro(
+          'Não foi possível concluir a ação. Atualize o histórico e tente novamente.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _ocupadoHistorico = false);
     }
@@ -1499,22 +1641,46 @@ Future<void> _carregarCategoriasBanco() async {
   }
 
   Future<void> _categorizarHistorico() async {
-    final ids = _movimentacoesFiltradas.where((m) => _selecionadasHistorico.contains(m.id)).map((m) => m.id!).toSet();
+    final ids = _movimentacoesFiltradas
+        .where((m) => _selecionadasHistorico.contains(m.id))
+        .map((m) => m.id!)
+        .toSet();
     final itens = _movimentacoes.where((m) => ids.contains(m.id)).toList();
     if (itens.isEmpty || _ocupadoHistorico) return;
     if (itens.map((m) => m.tipo).toSet().length != 1) {
-      _mostrarErro('Selecione somente receitas ou somente despesas para escolher uma categoria.');
+      _mostrarErro(
+        'Selecione somente receitas ou somente despesas para escolher uma categoria.',
+      );
       return;
     }
-    final categorias = _categoriasBanco.where((c) => c.tipo == itens.first.tipo).toList();
-    final escolhida = await showModalBottomSheet<Categoria>(context: context, isScrollControlled: true,
-      builder: (context) => SafeArea(child: SizedBox(height: MediaQuery.sizeOf(context).height * 0.6,
-        child: ListView(children: [
-          const ListTile(title: Text('Categoria das movimentações selecionadas')),
-          for (final c in categorias) ListTile(title: Text(c.nome), leading: Icon(c.icone),
-            onTap: () => Navigator.pop(context, c)),
-        ]))));
-    if (mounted && escolhida != null) await _aplicarAcaoHistorico(ids, categoria: escolhida);
+    final categorias = _categoriasBanco
+        .where((c) => c.tipo == itens.first.tipo)
+        .toList();
+    final escolhida = await showModalBottomSheet<Categoria>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.6,
+          child: ListView(
+            children: [
+              const ListTile(
+                title: Text('Categoria das movimentações selecionadas'),
+              ),
+              for (final c in categorias)
+                ListTile(
+                  title: Text(c.nome),
+                  leading: Icon(c.icone),
+                  onTap: () => Navigator.pop(context, c),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted && escolhida != null) {
+      await _aplicarAcaoHistorico(ids, categoria: escolhida);
+    }
   }
 
   Widget _avisoDesativadas() => AvisoDesativadas(
@@ -1531,17 +1697,13 @@ Future<void> _carregarCategoriasBanco() async {
     }),
   );
 
-  Future<void> _excluir(
-    Movimentacao movimentacao,
-  ) async {
+  Future<void> _excluir(Movimentacao movimentacao) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text('Excluir movimentação?'),
-          content: Text(
-            'Deseja excluir "${movimentacao.descricao}"?',
-          ),
+          content: Text('Deseja excluir "${movimentacao.descricao}"?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -1572,30 +1734,37 @@ Future<void> _carregarCategoriasBanco() async {
   @override
   Widget build(BuildContext context) {
     if (_carregando || _trocandoPerfil) {
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text(
-        'Finanças Fácil',
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'Finanças Fácil',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
-      ),
-    ),
-    body: const Center(
-      child: CircularProgressIndicator(),
-    ),
-  );
-}
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
     final paginas = [
       _dashboard(),
       _historico(),
       _relatorios(),
-      TelaAgenda(key: ValueKey(_banco.perfil.id), banco: AgendaBanco(_banco.database),
-        movimentacoes: _movimentacoes.where((m) => m.contabilizavel).toList(), categoriasVisuais: _categoriasBanco,
-        perfil: _banco.perfil.id, nomePerfil: CadastroPerfis.atual.value.nome,
-        categorias: {for (final tipo in TipoMovimentacao.values) tipo.name: _categoriasBanco.where((c) => c.tipo == tipo).map((c) => c.nome).toList()},
-        onRealizado: _carregarMovimentacoes),
+      TelaAgenda(
+        key: ValueKey(_banco.perfil.id),
+        banco: AgendaBanco(_banco.database),
+        movimentacoes: _movimentacoes.where((m) => m.contabilizavel).toList(),
+        categoriasVisuais: _categoriasBanco,
+        perfil: _banco.perfil.id,
+        nomePerfil: CadastroPerfis.atual.value.nome,
+        categorias: {
+          for (final tipo in TipoMovimentacao.values)
+            tipo.name: _categoriasBanco
+                .where((c) => c.tipo == tipo)
+                .map((c) => c.nome)
+                .toList(),
+        },
+        onRealizado: _carregarMovimentacoes,
+      ),
     ];
 
     return Scaffold(
@@ -1640,7 +1809,9 @@ Future<void> _carregarCategoriasBanco() async {
         ),
         actions: [
           IconButton(
-            tooltip: ocultarValores.value ? 'Mostrar valores' : 'Ocultar valores',
+            tooltip: ocultarValores.value
+                ? 'Mostrar valores'
+                : 'Ocultar valores',
             icon: Icon(
               ocultarValores.value
                   ? Icons.visibility_off_outlined
@@ -1654,9 +1825,7 @@ Future<void> _carregarCategoriasBanco() async {
             onPressed: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const TelaAparencia(),
-                ),
+                MaterialPageRoute(builder: (_) => const TelaAparencia()),
               );
             },
           ),
@@ -1666,9 +1835,7 @@ Future<void> _carregarCategoriasBanco() async {
             onPressed: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const TelaConfiguracoes(),
-                ),
+                MaterialPageRoute(builder: (_) => const TelaConfiguracoes()),
               );
 
               if (!mounted) return;
@@ -1680,53 +1847,58 @@ Future<void> _carregarCategoriasBanco() async {
           const SizedBox(width: 8),
         ],
       ),
-body: Stack(
-  children: [
-    Positioned.fill(child: paginas[_paginaAtual]),
-    if (_acoesAbertas)
-      Positioned.fill(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _acoesAbertas = false),
-          child: const ColoredBox(color: Colors.black26),
-        ),
-      ),
-  ],
-),
-      floatingActionButton: _paginaAtual == 3 ? null : Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      body: Stack(
         children: [
-          if (_acoesAbertas) ...[
-            FloatingActionButton.extended(
-              heroTag: 'acao_importar',
-              onPressed: () async {
-                setState(() => _acoesAbertas = false);
-                await _importarExtrato();
-              },
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Importar extrato'),
+          Positioned.fill(child: paginas[_paginaAtual]),
+          if (_acoesAbertas)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _acoesAbertas = false),
+                child: const ColoredBox(color: Colors.black26),
+              ),
             ),
-            const SizedBox(height: 12),
-            FloatingActionButton.extended(
-              heroTag: 'acao_adicionar',
-              onPressed: () async {
-                setState(() => _acoesAbertas = false);
-                await _abrirFormulario();
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Adicionar'),
-            ),
-            const SizedBox(height: 12),
-          ],
-          FloatingActionButton(
-            heroTag: 'menu_acoes',
-            tooltip: _acoesAbertas ? 'Fechar opções' : 'Adicionar ou importar',
-            onPressed: () => setState(() => _acoesAbertas = !_acoesAbertas),
-            child: Icon(_acoesAbertas ? Icons.close : Icons.add),
-          ),
         ],
       ),
+      floatingActionButton: _paginaAtual == 3
+          ? null
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (_acoesAbertas) ...[
+                  FloatingActionButton.extended(
+                    heroTag: 'acao_importar',
+                    onPressed: () async {
+                      setState(() => _acoesAbertas = false);
+                      await _importarExtrato();
+                    },
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Importar extrato'),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.extended(
+                    heroTag: 'acao_adicionar',
+                    onPressed: () async {
+                      setState(() => _acoesAbertas = false);
+                      await _abrirFormulario();
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Adicionar'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                FloatingActionButton(
+                  heroTag: 'menu_acoes',
+                  tooltip: _acoesAbertas
+                      ? 'Fechar opções'
+                      : 'Adicionar ou importar',
+                  onPressed: () =>
+                      setState(() => _acoesAbertas = !_acoesAbertas),
+                  child: Icon(_acoesAbertas ? Icons.close : Icons.add),
+                ),
+              ],
+            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _paginaAtual,
         onDestinationSelected: (index) {
@@ -1752,7 +1924,11 @@ body: Stack(
             selectedIcon: Icon(Icons.bar_chart),
             label: 'Relatórios',
           ),
-          NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendário'),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
+            label: 'Calendário',
+          ),
         ],
       ),
     );
@@ -1765,10 +1941,16 @@ body: Stack(
   Future<void> _abrirPerfis() async {
     if (_trocandoPerfil || _importandoExtrato) return;
     setState(() => _acoesAbertas = false);
-    final rota = MaterialPageRoute<PerfilFinanceiro>(builder: (_) => const TelaPerfis());
+    final rota = MaterialPageRoute<PerfilFinanceiro>(
+      builder: (_) => const TelaPerfis(),
+    );
     final escolhido = await Navigator.push(context, rota);
     await rota.completed;
-    if (!mounted || escolhido == null || escolhido.id == CadastroPerfis.atual.value.id) return;
+    if (!mounted ||
+        escolhido == null ||
+        escolhido.id == CadastroPerfis.atual.value.id) {
+      return;
+    }
     setState(() => _trocandoPerfil = true);
     try {
       // Abre o novo banco antes de trocar a tela; uma falha mantém o perfil atual.
@@ -1782,13 +1964,22 @@ body: Stack(
       await CadastroPerfis.lembrar(escolhido);
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
-      modoTema.value = ThemeMode.values.firstWhere((m) => m.name == modo, orElse: () => ThemeMode.system);
+      modoTema.value = ThemeMode.values.firstWhere(
+        (m) => m.name == modo,
+        orElse: () => ThemeMode.system,
+      );
       corTema.value = normalizarNomeTema(cor);
       ocultarValores.value = ocultar == '1';
-      tamanhoTexto.value = tamanhosTexto.containsKey(tamanho) ? tamanho! : 'Padrão';
+      tamanhoTexto.value = tamanhosTexto.containsKey(tamanho)
+          ? tamanho!
+          : 'Padrão';
       CadastroPerfis.atual.value = escolhido;
     } catch (_) {
-      if (mounted) _mostrarErro('Não foi possível abrir o perfil. Seus dados continuam no perfil atual.');
+      if (mounted) {
+        _mostrarErro(
+          'Não foi possível abrir o perfil. Seus dados continuam no perfil atual.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _trocandoPerfil = false);
     }
@@ -1882,14 +2073,16 @@ body: Stack(
               rotulo: 'Nova receita',
               corIcone: semantica.receita,
               corFundoIcone: semantica.receitaFundo,
-              onTap: () => _abrirFormulario(tipoInicial: TipoMovimentacao.receita),
+              onTap: () =>
+                  _abrirFormulario(tipoInicial: TipoMovimentacao.receita),
             ),
             botaoAcao(
               icone: Icons.arrow_downward_rounded,
               rotulo: 'Nova despesa',
               corIcone: semantica.despesa,
               corFundoIcone: semantica.despesaFundo,
-              onTap: () => _abrirFormulario(tipoInicial: TipoMovimentacao.despesa),
+              onTap: () =>
+                  _abrirFormulario(tipoInicial: TipoMovimentacao.despesa),
             ),
             botaoAcao(
               icone: Icons.upload_file_outlined,
@@ -1918,7 +2111,9 @@ body: Stack(
     final hoje = diaAgenda(DateTime.now());
     final fim = DateTime(hoje.year, hoje.month, hoje.day + 7);
     final previstos = _previsoesHome
-        .where((p) => p.pendente && !p.data.isBefore(hoje) && p.data.isBefore(fim))
+        .where(
+          (p) => p.pendente && !p.data.isBefore(hoje) && p.data.isBefore(fim),
+        )
         .toList();
     final entradasCentavos = previstos
         .where((p) => p.receita)
@@ -1937,13 +2132,14 @@ body: Stack(
         .fold<int>(
           0,
           (s, m) =>
-              s + (m.tipo == TipoMovimentacao.receita ? m.centavos : -m.centavos),
+              s +
+              (m.tipo == TipoMovimentacao.receita ? m.centavos : -m.centavos),
         );
     final dica = _despesasCentavos > _receitasCentavos
         ? 'As despesas superaram as receitas neste período em ${_dinheiro((_despesasCentavos - _receitasCentavos) / 100)}. Revise os gastos antes de assumir novos compromissos.'
         : categorias.isNotEmpty && _despesasCentavos > 0
-            ? '${categorias.first.key} representa ${(categorias.first.value / _despesas * 100).toStringAsFixed(1).replaceAll('.', ',')}% das despesas do período. Definir um limite para essa categoria pode ajudar no planejamento.'
-            : 'Registre suas movimentações e categorize seus gastos para acompanhar melhor seu dinheiro.';
+        ? '${categorias.first.key} representa ${(categorias.first.value / _despesas * 100).toStringAsFixed(1).replaceAll('.', ',')}% das despesas do período. Definir um limite para essa categoria pode ajudar no planejamento.'
+        : 'Registre suas movimentações e categorize seus gastos para acompanhar melhor seu dinheiro.';
 
     Widget linha(String rotulo, double valor, Color cor) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -2070,9 +2266,12 @@ body: Stack(
     final antesCentavos = somaCentavos(base);
     if (antesCentavos == 0) return null;
     final atualCentavos = somaCentavos(
-      _movimentacoesFinanceirasPeriodo.where((m) => tipo == null || m.tipo == tipo),
+      _movimentacoesFinanceirasPeriodo.where(
+        (m) => tipo == null || m.tipo == tipo,
+      ),
     );
-    final variacao = (atualCentavos - antesCentavos) / antesCentavos.abs() * 100;
+    final variacao =
+        (atualCentavos - antesCentavos) / antesCentavos.abs() * 100;
     return '${variacao >= 0 ? '↑' : '↓'} ${variacao.abs().toStringAsFixed(1).replaceAll('.', ',')}% vs. mês anterior${_periodoFiltro == PeriodoFiltro.esteMes ? ' • mês atual em andamento' : ''}';
   }
 
@@ -2240,20 +2439,19 @@ body: Stack(
           const EstadoVazio(
             icone: Icons.receipt_long_outlined,
             titulo: 'Nenhuma movimentação',
-            subtitulo:
-                'Não existem movimentações no período selecionado.',
+            subtitulo: 'Não existem movimentações no período selecionado.',
           )
         else
-          ...recentes.take(4).map(
+          ...recentes
+              .take(4)
+              .map(
                 (item) => CardMovimentacao(
                   movimentacao: item,
                   onAlternarContabilizacao: () => _alternarContabilizacao(item),
                   dinheiro: _dinheiro,
                   dataFormatada: _dataFormatada,
                   onEditar: () {
-                    _abrirFormulario(
-                      movimentacao: item,
-                    );
+                    _abrirFormulario(movimentacao: item);
                   },
                   onExcluir: () {
                     _excluir(item);
@@ -2335,11 +2533,13 @@ body: Stack(
             ),
             ListTile(
               title: const Text('Receitas'),
-              onTap: () => Navigator.pop(context, TipoMovimentacao.receita.index),
+              onTap: () =>
+                  Navigator.pop(context, TipoMovimentacao.receita.index),
             ),
             ListTile(
               title: const Text('Despesas'),
-              onTap: () => Navigator.pop(context, TipoMovimentacao.despesa.index),
+              onTap: () =>
+                  Navigator.pop(context, TipoMovimentacao.despesa.index),
             ),
           ],
         ),
@@ -2367,9 +2567,11 @@ body: Stack(
         .fold<int>(
           0,
           (s, m) =>
-              s + (m.tipo == TipoMovimentacao.receita ? m.centavos : -m.centavos),
+              s +
+              (m.tipo == TipoMovimentacao.receita ? m.centavos : -m.centavos),
         );
-    final temFiltroAtivo = _filtroTipo != null ||
+    final temFiltroAtivo =
+        _filtroTipo != null ||
         _filtroCategoria != null ||
         _filtroContaHistorico != null ||
         _filtroAtiva != null ||
@@ -2449,8 +2651,8 @@ body: Stack(
                   _filtroTipo == null
                       ? 'Tipo'
                       : _filtroTipo == TipoMovimentacao.receita
-                          ? 'Receitas'
-                          : 'Despesas',
+                      ? 'Receitas'
+                      : 'Despesas',
                 ),
                 onPressed: _abrirFiltroTipoHistorico,
               ),
@@ -2479,15 +2681,18 @@ body: Stack(
                 initialValue: _filtroAtiva == null
                     ? 'todas'
                     : _filtroAtiva!
-                        ? 'ativas'
-                        : 'desativadas',
+                    ? 'ativas'
+                    : 'desativadas',
                 onSelected: (valor) => setState(() {
                   _filtroAtiva = valor == 'todas' ? null : valor == 'ativas';
                 }),
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'todas', child: Text('Todas')),
                   PopupMenuItem(value: 'ativas', child: Text('Ativas')),
-                  PopupMenuItem(value: 'desativadas', child: Text('Desativadas')),
+                  PopupMenuItem(
+                    value: 'desativadas',
+                    child: Text('Desativadas'),
+                  ),
                 ],
                 child: Chip(
                   avatar: const Icon(Icons.pause_circle_outline, size: 18),
@@ -2495,8 +2700,8 @@ body: Stack(
                     _filtroAtiva == null
                         ? 'Todas'
                         : _filtroAtiva!
-                            ? 'Ativas'
-                            : 'Desativadas',
+                        ? 'Ativas'
+                        : 'Desativadas',
                   ),
                 ),
               ),
@@ -2565,8 +2770,8 @@ body: Stack(
                   onPressed: _ocupadoHistorico
                       ? null
                       : () => setState(() {
-                            _selecionadasHistorico.addAll(idsVisiveis);
-                          }),
+                          _selecionadasHistorico.addAll(idsVisiveis);
+                        }),
                   child: const Text('Selecionar visíveis'),
                 ),
                 TextButton(
@@ -2616,8 +2821,7 @@ body: Stack(
               ? const EstadoVazio(
                   icone: Icons.search_off,
                   titulo: 'Nada por aqui',
-                  subtitulo:
-                      'Nenhuma movimentação corresponde à pesquisa e aos filtros selecionados.',
+                  subtitulo: 'Nenhuma movimentação corresponde à pesquisa e aos filtros selecionados.',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(
@@ -2630,10 +2834,12 @@ body: Stack(
                   itemBuilder: (_, index) {
                     final item = lista[index];
                     final dia = _inicioDoDia(item.data);
-                    final iniciaDia = index == 0 ||
+                    final iniciaDia =
+                        index == 0 ||
                         _inicioDoDia(lista[index - 1].data) != dia;
-                    final subtotalCentavos =
-                        iniciaDia ? subtotalDoDiaCentavos(dia) : 0;
+                    final subtotalCentavos = iniciaDia
+                        ? subtotalDoDiaCentavos(dia)
+                        : 0;
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2689,9 +2895,7 @@ body: Stack(
                           dinheiro: _dinheiro,
                           dataFormatada: _dataFormatada,
                           onEditar: () {
-                            _abrirFormulario(
-                              movimentacao: item,
-                            );
+                            _abrirFormulario(movimentacao: item);
                           },
                           onExcluir: () {
                             _excluir(item);
@@ -2714,25 +2918,14 @@ body: Stack(
     final Map<String, Map<String, double>> mapa = {};
 
     for (final item in _movimentacoesFinanceirasPeriodo) {
-      final chave =
-          '${item.data.year}-${item.data.month}';
+      final chave = '${item.data.year}-${item.data.month}';
 
-      mapa.putIfAbsent(
-        chave,
-        () => {
-          'receitas': 0,
-          'despesas': 0,
-        },
-      );
+      mapa.putIfAbsent(chave, () => {'receitas': 0, 'despesas': 0});
 
       if (item.tipo == TipoMovimentacao.receita) {
-        mapa[chave]!['receitas'] =
-            mapa[chave]!['receitas']! +
-            item.centavos;
+        mapa[chave]!['receitas'] = mapa[chave]!['receitas']! + item.centavos;
       } else {
-        mapa[chave]!['despesas'] =
-            mapa[chave]!['despesas']! +
-            item.centavos;
+        mapa[chave]!['despesas'] = mapa[chave]!['despesas']! + item.centavos;
       }
     }
 
@@ -2774,11 +2967,17 @@ body: Stack(
             final intervalo = await showDateRangePicker(
               context: context,
               locale: const Locale('pt', 'BR'),
-              helpText: primeiro ? 'Período A' : 'Período B (base da comparação)',
+              helpText: primeiro
+                  ? 'Período A'
+                  : 'Período B (base da comparação)',
               firstDate: DateTime(2000),
               lastDate: DateTime(2100, 12, 31),
-              initialDateRange: (primeiro ? periodoA : periodoB) ??
-                  DateTimeRange(start: DateTime(hoje.year, hoje.month), end: hoje),
+              initialDateRange:
+                  (primeiro ? periodoA : periodoB) ??
+                  DateTimeRange(
+                    start: DateTime(hoje.year, hoje.month),
+                    end: hoje,
+                  ),
             );
             if (!context.mounted || intervalo == null) return;
             atualizar(() {
@@ -2789,6 +2988,7 @@ body: Stack(
               }
             });
           }
+
           return AlertDialog(
             title: const Text('Escolher períodos'),
             content: SingleChildScrollView(
@@ -2797,20 +2997,33 @@ body: Stack(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Período A'),
-                  OutlinedButton(onPressed: () => escolher(true), child: Text(rotulo(periodoA))),
+                  OutlinedButton(
+                    onPressed: () => escolher(true),
+                    child: Text(rotulo(periodoA)),
+                  ),
                   const SizedBox(height: 16),
                   const Text('Período B • base da comparação'),
-                  OutlinedButton(onPressed: () => escolher(false), child: Text(rotulo(periodoB))),
+                  OutlinedButton(
+                    onPressed: () => escolher(false),
+                    child: Text(rotulo(periodoB)),
+                  ),
                   const SizedBox(height: 12),
-                  const Text('Compare meses, trimestres ou quaisquer intervalos.'),
+                  const Text(
+                    'Compare meses, trimestres ou quaisquer intervalos.',
+                  ),
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
               FilledButton(
-                onPressed: periodoA == null || periodoB == null ? null
-                    : () => Navigator.pop(dialogContext, (periodoA!, periodoB!)),
+                onPressed: periodoA == null || periodoB == null
+                    ? null
+                    : () =>
+                          Navigator.pop(dialogContext, (periodoA!, periodoB!)),
                 child: const Text('Comparar'),
               ),
             ],
@@ -2858,64 +3071,83 @@ body: Stack(
       final ultimoB = _comparacaoB!.end;
       fimAnterior = DateTime(ultimoB.year, ultimoB.month, ultimoB.day + 1);
     } else {
-    switch (_periodoFiltro) {
-      case PeriodoFiltro.todos:
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Comparação de períodos', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                const Text('Escolha dois intervalos ou selecione um mês, ano ou intervalo no filtro acima para comparar com o período anterior.'),
-                const SizedBox(height: 12),
-                controles(),
-              ],
+      switch (_periodoFiltro) {
+        case PeriodoFiltro.todos:
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Comparação de períodos',
+                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Escolha dois intervalos ou selecione um mês, ano ou intervalo no filtro acima para comparar com o período anterior.',
+                  ),
+                  const SizedBox(height: 12),
+                  controles(),
+                ],
+              ),
             ),
-          ),
-        );
-      case PeriodoFiltro.esteMes:
-        inicio = DateTime(hoje.year, hoje.month);
-        fim = DateTime(hoje.year, hoje.month + 1);
-        anterior = DateTime(hoje.year, hoje.month - 1);
-        break;
-      case PeriodoFiltro.mesPassado:
-        inicio = DateTime(hoje.year, hoje.month - 1);
-        fim = DateTime(hoje.year, hoje.month);
-        anterior = DateTime(hoje.year, hoje.month - 2);
-        break;
-      case PeriodoFiltro.esteAno:
-        inicio = DateTime(hoje.year);
-        fim = DateTime(hoje.year + 1);
-        anterior = DateTime(hoje.year - 1);
-        break;
-      case PeriodoFiltro.personalizado:
-        if (_inicioPersonalizado == null || _fimPersonalizado == null) {
-          return const SizedBox.shrink();
-        }
-        inicio = _inicioDoDia(_inicioPersonalizado!);
-        final ultimo = _fimPersonalizado!;
-        fim = DateTime(ultimo.year, ultimo.month, ultimo.day + 1);
-        final dias = DateTime.utc(fim.year, fim.month, fim.day)
-            .difference(DateTime.utc(inicio.year, inicio.month, inicio.day)).inDays;
-        anterior = DateTime(inicio.year, inicio.month, inicio.day - dias);
-        break;
+          );
+        case PeriodoFiltro.esteMes:
+          inicio = DateTime(hoje.year, hoje.month);
+          fim = DateTime(hoje.year, hoje.month + 1);
+          anterior = DateTime(hoje.year, hoje.month - 1);
+          break;
+        case PeriodoFiltro.mesPassado:
+          inicio = DateTime(hoje.year, hoje.month - 1);
+          fim = DateTime(hoje.year, hoje.month);
+          anterior = DateTime(hoje.year, hoje.month - 2);
+          break;
+        case PeriodoFiltro.esteAno:
+          inicio = DateTime(hoje.year);
+          fim = DateTime(hoje.year + 1);
+          anterior = DateTime(hoje.year - 1);
+          break;
+        case PeriodoFiltro.personalizado:
+          if (_inicioPersonalizado == null || _fimPersonalizado == null) {
+            return const SizedBox.shrink();
+          }
+          inicio = _inicioDoDia(_inicioPersonalizado!);
+          final ultimo = _fimPersonalizado!;
+          fim = DateTime(ultimo.year, ultimo.month, ultimo.day + 1);
+          final dias = DateTime.utc(fim.year, fim.month, fim.day)
+              .difference(DateTime.utc(inicio.year, inicio.month, inicio.day))
+              .inDays;
+          anterior = DateTime(inicio.year, inicio.month, inicio.day - dias);
+          break;
+      }
+
+      fimAnterior = inicio;
     }
 
-    fimAnterior = inicio;
-    }
-
-    final atuais = _movimentacoes.where((m) => m.contabilizavel).where((m) =>
-        !m.data.isBefore(inicio) && m.data.isBefore(fim)).toList();
-    final anteriores = _movimentacoes.where((m) => m.contabilizavel).where((m) =>
-        !m.data.isBefore(anterior) && m.data.isBefore(fimAnterior)).toList();
-    int totalCentavos(List<Movimentacao> itens, TipoMovimentacao tipo) =>
-        itens.where((m) => m.tipo == tipo).fold<int>(0, (soma, m) => soma + m.centavos);
+    final atuais = _movimentacoes
+        .where((m) => m.contabilizavel)
+        .where((m) => !m.data.isBefore(inicio) && m.data.isBefore(fim))
+        .toList();
+    final anteriores = _movimentacoes
+        .where((m) => m.contabilizavel)
+        .where(
+          (m) => !m.data.isBefore(anterior) && m.data.isBefore(fimAnterior),
+        )
+        .toList();
+    int totalCentavos(List<Movimentacao> itens, TipoMovimentacao tipo) => itens
+        .where((m) => m.tipo == tipo)
+        .fold<int>(0, (soma, m) => soma + m.centavos);
     final receitaCentavos = totalCentavos(atuais, TipoMovimentacao.receita);
     final despesaCentavos = totalCentavos(atuais, TipoMovimentacao.despesa);
-    final receitaAntesCentavos = totalCentavos(anteriores, TipoMovimentacao.receita);
-    final despesaAntesCentavos = totalCentavos(anteriores, TipoMovimentacao.despesa);
+    final receitaAntesCentavos = totalCentavos(
+      anteriores,
+      TipoMovimentacao.receita,
+    );
+    final despesaAntesCentavos = totalCentavos(
+      anteriores,
+      TipoMovimentacao.despesa,
+    );
     final receita = receitaCentavos / 100;
     final despesa = despesaCentavos / 100;
     final receitaAntes = receitaAntesCentavos / 100;
@@ -2924,16 +3156,35 @@ body: Stack(
         '${_dataFormatada(de)} – ${_dataFormatada(DateTime(ate.year, ate.month, ate.day - 1))}';
 
     String nomeIntervalo(DateTime de, DateTime ate) {
-      const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      const meses = [
+        'Janeiro',
+        'Fevereiro',
+        'Março',
+        'Abril',
+        'Maio',
+        'Junho',
+        'Julho',
+        'Agosto',
+        'Setembro',
+        'Outubro',
+        'Novembro',
+        'Dezembro',
+      ];
       final ultimo = DateTime(ate.year, ate.month, ate.day - 1);
-      if (de.day == 1 && ate.day == 1 && de.year == ultimo.year && de.month == ultimo.month) {
+      if (de.day == 1 &&
+          ate.day == 1 &&
+          de.year == ultimo.year &&
+          de.month == ultimo.month) {
         return '${meses[de.month - 1]} ${de.year}';
       }
       return datas(de, ate);
     }
-    int dias(DateTime de, DateTime ate) => DateTime.utc(ate.year, ate.month, ate.day)
-        .difference(DateTime.utc(de.year, de.month, de.day)).inDays;
+
+    int dias(DateTime de, DateTime ate) => DateTime.utc(
+      ate.year,
+      ate.month,
+      ate.day,
+    ).difference(DateTime.utc(de.year, de.month, de.day)).inDays;
     final semantica = CoresSemanticas.de(context);
     final esquema = Theme.of(context).colorScheme;
     final labelA = livre ? 'A' : 'Selecionado';
@@ -2966,8 +3217,9 @@ body: Stack(
           : diferenca < 0
           ? semantica.despesa
           : semantica.receita;
-      final corGrafico =
-          titulo == 'Despesas' ? semantica.despesa : semantica.receita;
+      final corGrafico = titulo == 'Despesas'
+          ? semantica.despesa
+          : semantica.receita;
       const meses = [
         'Jan',
         'Fev',
@@ -3212,7 +3464,9 @@ body: Stack(
                             text: 'Período A: ',
                             style: TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          TextSpan(text: '${nomeIntervalo(inicio, fim)}  vs.  '),
+                          TextSpan(
+                            text: '${nomeIntervalo(inicio, fim)}  vs.  ',
+                          ),
                           const TextSpan(
                             text: 'Período B: ',
                             style: TextStyle(fontWeight: FontWeight.w700),
@@ -3361,9 +3615,7 @@ body: Stack(
       decoration: BoxDecoration(
         color: cor.surface,
         borderRadius: BorderRadius.circular(RaioBorda.md),
-        border: Border.all(
-          color: cor.outlineVariant.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: cor.outlineVariant.withValues(alpha: 0.45)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3465,7 +3717,9 @@ body: Stack(
               initialValue: _anoAnalise,
               decoration: const InputDecoration(labelText: 'Ano'),
               items: anos
-                  .map((ano) => DropdownMenuItem(value: ano, child: Text('$ano')))
+                  .map(
+                    (ano) => DropdownMenuItem(value: ano, child: Text('$ano')),
+                  )
                   .toList(),
               onChanged: (ano) {
                 if (ano != null) setState(() => _anoAnalise = ano);
@@ -3616,7 +3870,8 @@ body: Stack(
                             Text(
                               _dinheiro(valores[ranking[pos]]),
                               style: TextStyle(
-                                color: _rankingAnual == 0 ||
+                                color:
+                                    _rankingAnual == 0 ||
                                         valores[ranking[pos]] < 0
                                     ? vermelho
                                     : verde,
@@ -3838,9 +4093,7 @@ class TelaDetalhesCategoria extends StatelessWidget {
       ..sort((a, b) => b.data.compareTo(a.data));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(categoria),
-      ),
+      appBar: AppBar(title: Text(categoria)),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -3872,9 +4125,7 @@ class TelaDetalhesCategoria extends StatelessWidget {
                 Text(
                   '${movimentacoes.length} '
                   '${movimentacoes.length == 1 ? 'movimentação' : 'movimentações'}',
-                  style: TextStyle(
-                    color: esquema.onSurfaceVariant,
-                  ),
+                  style: TextStyle(color: esquema.onSurfaceVariant),
                 ),
               ],
             ),
@@ -3884,10 +4135,7 @@ class TelaDetalhesCategoria extends StatelessWidget {
 
           const Text(
             'Movimentações',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
           ),
 
           const SizedBox(height: 12),
@@ -3909,22 +4157,13 @@ class TelaDetalhesCategoria extends StatelessWidget {
                     color: semantica.despesaFundo,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(
-                    Icons.arrow_downward,
-                    color: semantica.despesa,
-                  ),
+                  child: Icon(Icons.arrow_downward, color: semantica.despesa),
                 ),
                 title: Text(
-                  item.descricao.isEmpty
-                      ? item.categoria
-                      : item.descricao,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  item.descricao.isEmpty ? item.categoria : item.descricao,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                subtitle: Text(
-                  _dataFormatada(item.data),
-                ),
+                subtitle: Text(_dataFormatada(item.data)),
                 trailing: Text(
                   '- ${_dinheiro(item.valor)}',
                   style: TextStyle(
@@ -3959,34 +4198,27 @@ class TelaFormulario extends StatefulWidget {
   final TipoMovimentacao? tipoInicial;
 
   @override
-  State<TelaFormulario> createState() =>
-      _TelaFormularioState();
+  State<TelaFormulario> createState() => _TelaFormularioState();
 }
 
-class _TelaFormularioState
-    extends State<TelaFormulario> {
+class _TelaFormularioState extends State<TelaFormulario> {
   final _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController
-      _valorController;
+  late final TextEditingController _valorController;
 
-  late final TextEditingController
-      _descricaoController;
+  late final TextEditingController _descricaoController;
 
   late TipoMovimentacao _tipo;
   late String _categoria;
   late DateTime _data;
 
-  bool get _editando =>
-      widget.movimentacao != null;
+  bool get _editando => widget.movimentacao != null;
 
   List<Categoria> get _categoriasDoTipo {
-  return widget.categorias
-      .where(
-        (categoria) => categoria.tipo == _tipo,
-      )
-      .toList();
-}
+    return widget.categorias
+        .where((categoria) => categoria.tipo == _tipo)
+        .toList();
+  }
 
   @override
   void initState() {
@@ -3994,48 +4226,43 @@ class _TelaFormularioState
 
     final item = widget.movimentacao;
 
-    _tipo =
-        item?.tipo ?? widget.tipoInicial ??
-        TipoMovimentacao.despesa;
+    _tipo = item?.tipo ?? widget.tipoInicial ?? TipoMovimentacao.despesa;
 
     final categoriasDoTipo = widget.categorias
-    .where(
-      (categoria) => categoria.tipo == _tipo,
-    )
-    .toList();
+        .where((categoria) => categoria.tipo == _tipo)
+        .toList();
 
-_categoria =
-    item?.categoria ??
-    (categoriasDoTipo.isEmpty ? '' : widget.tipoInicial == null
-        ? categoriasDoTipo.first.nome
-        : categoriasDoTipo.firstWhere(
-            (categoria) => categoria.nome.trim().toLowerCase() == 'outros',
-            orElse: () => categoriasDoTipo.firstWhere(
-              (categoria) => categoria.padrao && categoria.codigoIcone ==
-                  (_tipo == TipoMovimentacao.receita
-                      ? Icons.add_circle_outline.codePoint
-                      : Icons.more_horiz.codePoint),
-              orElse: () => categoriasDoTipo.first,
-            ),
-          ).nome);
+    _categoria =
+        item?.categoria ??
+        (categoriasDoTipo.isEmpty
+            ? ''
+            : widget.tipoInicial == null
+            ? categoriasDoTipo.first.nome
+            : categoriasDoTipo
+                  .firstWhere(
+                    (categoria) =>
+                        categoria.nome.trim().toLowerCase() == 'outros',
+                    orElse: () => categoriasDoTipo.firstWhere(
+                      (categoria) =>
+                          categoria.padrao &&
+                          categoria.codigoIcone ==
+                              (_tipo == TipoMovimentacao.receita
+                                  ? Icons.add_circle_outline.codePoint
+                                  : Icons.more_horiz.codePoint),
+                      orElse: () => categoriasDoTipo.first,
+                    ),
+                  )
+                  .nome);
 
-    _data =
-        item?.data ??
-        DateUtils.dateOnly(DateTime.now());
+    _data = item?.data ?? DateUtils.dateOnly(DateTime.now());
 
-    _valorController =
-        TextEditingController(
+    _valorController = TextEditingController(
       text: item == null
           ? ''
-          : item.valor
-              .toStringAsFixed(2)
-              .replaceAll('.', ','),
+          : item.valor.toStringAsFixed(2).replaceAll('.', ','),
     );
 
-    _descricaoController =
-        TextEditingController(
-      text: item?.descricao ?? '',
-    );
+    _descricaoController = TextEditingController(text: item?.descricao ?? '');
   }
 
   @override
@@ -4046,8 +4273,7 @@ _categoria =
   }
 
   Future<void> _selecionarData() async {
-    final selecionada =
-        await showDatePicker(
+    final selecionada = await showDatePicker(
       context: context,
       locale: const Locale("pt", "BR"),
       initialDate: _data,
@@ -4063,32 +4289,27 @@ _categoria =
   }
 
   void _salvar() {
-    if (!_formKey.currentState!
-        .validate()) {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    var textoValor =
-        _valorController.text.trim();
+    var textoValor = _valorController.text.trim();
 
     if (textoValor.contains(',')) {
-      textoValor = textoValor
-          .replaceAll('.', '')
-          .replaceAll(',', '.');
+      textoValor = textoValor.replaceAll('.', '').replaceAll(',', '.');
     }
 
-    final valor =
-        double.tryParse(textoValor);
+    final valor = double.tryParse(textoValor);
 
-    if (valor == null || !valor.isFinite || !(valor * 100).isFinite || valor <= 0) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Informe um valor válido.',
-          ),
-        ),
-      );
+    if (valor == null ||
+        !valor.isFinite ||
+        !(valor * 100).isFinite ||
+        (valor * 100).abs() > maximoCentavosExatos ||
+        valor <= 0 ||
+        (valor * 100).round() <= 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Informe um valor válido.')));
 
       return;
     }
@@ -4127,9 +4348,7 @@ _categoria =
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _editando ? 'Editar movimentação' : 'Nova movimentação',
-        ),
+        title: Text(_editando ? 'Editar movimentação' : 'Nova movimentação'),
       ),
       body: Form(
         key: _formKey,
@@ -4212,10 +4431,7 @@ _categoria =
                     decoration: InputDecoration(
                       labelText: 'Valor',
                       prefixText: 'R\$ ',
-                      prefixIcon: Icon(
-                        Icons.attach_money,
-                        color: corAtiva,
-                      ),
+                      prefixIcon: Icon(Icons.attach_money, color: corAtiva),
                     ),
                     validator: (valor) {
                       if (valor == null || valor.trim().isEmpty) {
@@ -4328,16 +4544,11 @@ _categoria =
                 decoration: BoxDecoration(
                   color: esquema.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(RaioBorda.md),
-                  border: Border.all(
-                    color: esquema.outlineVariant,
-                  ),
+                  border: Border.all(color: esquema.outlineVariant),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.calendar_month_outlined,
-                      color: esquema.primary,
-                    ),
+                    Icon(Icons.calendar_month_outlined, color: esquema.primary),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Text(
@@ -4350,10 +4561,7 @@ _categoria =
                         ),
                       ),
                     ),
-                    Icon(
-                      Icons.chevron_right,
-                      color: esquema.onSurfaceVariant,
-                    ),
+                    Icon(Icons.chevron_right, color: esquema.onSurfaceVariant),
                   ],
                 ),
               ),
@@ -4509,7 +4717,9 @@ class CardMovimentacao extends StatelessWidget {
         final semantica = CoresSemanticas.de(context);
         final esquema = Theme.of(context).colorScheme;
         final corTipo = receita ? semantica.receita : semantica.despesa;
-        final corFundo = receita ? semantica.receitaFundo : semantica.despesaFundo;
+        final corFundo = receita
+            ? semantica.receitaFundo
+            : semantica.despesaFundo;
         return SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
@@ -4650,7 +4860,9 @@ class CardMovimentacao extends StatelessWidget {
     final semantica = CoresSemanticas.de(context);
     final esquema = Theme.of(context).colorScheme;
     final corTipo = receita ? semantica.receita : semantica.despesa;
-    final corFundoTipo = receita ? semantica.receitaFundo : semantica.despesaFundo;
+    final corFundoTipo = receita
+        ? semantica.receitaFundo
+        : semantica.despesaFundo;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -4667,10 +4879,7 @@ class CardMovimentacao extends StatelessWidget {
         selected: selecionada,
         onLongPress: onSelecionar,
         onTap: emSelecao ? onSelecionar : () => _mostrarDetalhes(context),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 8,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: emSelecao
             ? Checkbox(
                 value: selecionada,
@@ -4693,17 +4902,12 @@ class CardMovimentacao extends StatelessWidget {
           resumirDescricao(movimentacao.descricao),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
           '${!movimentacao.ativa ? 'Contabilização desativada • ' : ''}${movimentacao.transferencia ? 'Transferência entre contas • ' : ''}${movimentacao.categoria} • '
           '${dataFormatada(movimentacao.data)}',
-          style: TextStyle(
-            fontSize: 12,
-            color: esquema.onSurfaceVariant,
-          ),
+          style: TextStyle(fontSize: 12, color: esquema.onSurfaceVariant),
         ),
         trailing: PopupMenuButton<String>(
           enabled: !emSelecao,
@@ -4773,11 +4977,7 @@ class CardMovimentacao extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Icon(
-                Icons.more_horiz,
-                size: 20,
-                color: esquema.onSurfaceVariant,
-              ),
+              Icon(Icons.more_horiz, size: 20, color: esquema.onSurfaceVariant),
             ],
           ),
         ),
@@ -4806,9 +5006,7 @@ class EstadoVazio extends StatelessWidget {
   Widget build(BuildContext context) {
     final esquema = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: 44,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 44),
       child: Center(
         child: Column(
           children: [
@@ -4819,32 +5017,20 @@ class EstadoVazio extends StatelessWidget {
                 color: esquema.surfaceContainerHighest.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(RaioBorda.cartao),
               ),
-              child: Icon(
-                icone,
-                size: 32,
-                color: esquema.onSurfaceVariant,
-              ),
+              child: Icon(icone, size: 32, color: esquema.onSurfaceVariant),
             ),
             const SizedBox(height: 14),
             Text(
               titulo,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 300,
-              ),
+              constraints: const BoxConstraints(maxWidth: 300),
               child: Text(
                 subtitulo,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: esquema.onSurfaceVariant,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: esquema.onSurfaceVariant, fontSize: 13),
               ),
             ),
           ],
@@ -4853,7 +5039,6 @@ class EstadoVazio extends StatelessWidget {
     );
   }
 }
-
 
 // ============================================================
 // REVISÃO DO EXTRATO IMPORTADO
@@ -4876,14 +5061,11 @@ class TelaRevisaoExtrato extends StatefulWidget {
   final ContaOrigem? conta;
 
   @override
-  State<TelaRevisaoExtrato> createState() =>
-      _TelaRevisaoExtratoState();
+  State<TelaRevisaoExtrato> createState() => _TelaRevisaoExtratoState();
 }
 
-class _TelaRevisaoExtratoState
-    extends State<TelaRevisaoExtrato> {
-
-    bool _editandoCategorias = false;
+class _TelaRevisaoExtratoState extends State<TelaRevisaoExtrato> {
+  bool _editandoCategorias = false;
   final Set<ItemExtrato> _itensParaCategorizar = {};
 
   void _alternarEdicaoCategorias() {
@@ -4897,11 +5079,10 @@ class _TelaRevisaoExtratoState
 
   TipoMovimentacao? _tipoFiltro;
 
-PeriodoFiltro _periodoFiltroRevisao =
-    PeriodoFiltro.todos;
+  PeriodoFiltro _periodoFiltroRevisao = PeriodoFiltro.todos;
 
-DateTime? _inicioFiltroRevisao;
-DateTime? _fimFiltroRevisao;
+  DateTime? _inicioFiltroRevisao;
+  DateTime? _fimFiltroRevisao;
 
   String _dataFormatada(DateTime data) {
     return '${data.day.toString().padLeft(2, '0')}/'
@@ -4931,126 +5112,77 @@ DateTime? _fimFiltroRevisao;
   }
 
   int get _quantidadeSelecionada {
-    return widget.itens
-        .where((item) => item.selecionado)
-        .length;
+    return widget.itens.where((item) => item.selecionado).length;
   }
 
   bool _estaNoPeriodoRevisao(DateTime data) {
-  final hoje = DateTime.now();
+    final hoje = DateTime.now();
 
-  DateTime? inicio;
-  DateTime? fim;
+    DateTime? inicio;
+    DateTime? fim;
 
-  switch (_periodoFiltroRevisao) {
-    case PeriodoFiltro.esteMes:
-      inicio = DateTime(
-        hoje.year,
-        hoje.month,
-        1,
-      );
+    switch (_periodoFiltroRevisao) {
+      case PeriodoFiltro.esteMes:
+        inicio = DateTime(hoje.year, hoje.month, 1);
 
-      fim = DateTime(
-        hoje.year,
-        hoje.month + 1,
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-      break;
+        fim = DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59, 999);
+        break;
 
-    case PeriodoFiltro.mesPassado:
-      inicio = DateTime(
-        hoje.year,
-        hoje.month - 1,
-        1,
-      );
+      case PeriodoFiltro.mesPassado:
+        inicio = DateTime(hoje.year, hoje.month - 1, 1);
 
-      fim = DateTime(
-        hoje.year,
-        hoje.month,
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-      break;
+        fim = DateTime(hoje.year, hoje.month, 0, 23, 59, 59, 999);
+        break;
 
-    case PeriodoFiltro.esteAno:
-      inicio = DateTime(
-        hoje.year,
-        1,
-        1,
-      );
+      case PeriodoFiltro.esteAno:
+        inicio = DateTime(hoje.year, 1, 1);
 
-      fim = DateTime(
-        hoje.year,
-        12,
-        31,
-        23,
-        59,
-        59,
-        999,
-      );
-      break;
+        fim = DateTime(hoje.year, 12, 31, 23, 59, 59, 999);
+        break;
 
-    case PeriodoFiltro.todos:
-      return true;
-
-    case PeriodoFiltro.personalizado:
-      if (_inicioFiltroRevisao == null ||
-          _fimFiltroRevisao == null) {
+      case PeriodoFiltro.todos:
         return true;
-      }
 
-      inicio = DateTime(
-        _inicioFiltroRevisao!.year,
-        _inicioFiltroRevisao!.month,
-        _inicioFiltroRevisao!.day,
-      );
+      case PeriodoFiltro.personalizado:
+        if (_inicioFiltroRevisao == null || _fimFiltroRevisao == null) {
+          return true;
+        }
 
-      fim = DateTime(
-        _fimFiltroRevisao!.year,
-        _fimFiltroRevisao!.month,
-        _fimFiltroRevisao!.day,
-        23,
-        59,
-        59,
-        999,
-      );
-      break;
+        inicio = DateTime(
+          _inicioFiltroRevisao!.year,
+          _inicioFiltroRevisao!.month,
+          _inicioFiltroRevisao!.day,
+        );
+
+        fim = DateTime(
+          _fimFiltroRevisao!.year,
+          _fimFiltroRevisao!.month,
+          _fimFiltroRevisao!.day,
+          23,
+          59,
+          59,
+          999,
+        );
+        break;
+    }
+
+    return !data.isBefore(inicio) && !data.isAfter(fim);
   }
 
-  return !data.isBefore(inicio) &&
-      !data.isAfter(fim);
-}
-
   List<ItemExtrato> get _itensVisiveis {
-  return widget.itens.where((item) {
-    final categoriaOk =
-        _categoriaFiltro == 'Todas' ||
-        item.categoria == _categoriaFiltro;
+    return widget.itens.where((item) {
+      final categoriaOk =
+          _categoriaFiltro == 'Todas' || item.categoria == _categoriaFiltro;
 
-    final tipoOk =
-        _tipoFiltro == null ||
-        item.tipo == _tipoFiltro;
+      final tipoOk = _tipoFiltro == null || item.tipo == _tipoFiltro;
 
-    final periodoOk =
-        _estaNoPeriodoRevisao(item.data);
+      final periodoOk = _estaNoPeriodoRevisao(item.data);
 
-    return categoriaOk &&
-        tipoOk &&
-        periodoOk;
-  }).toList();
-}
+      return categoriaOk && tipoOk && periodoOk;
+    }).toList();
+  }
 
-  Future<void> _mostrarAvisoRevisao(
-    String titulo,
-    String mensagem,
-  ) async {
+  Future<void> _mostrarAvisoRevisao(String titulo, String mensagem) async {
     if (!mounted) return;
 
     await showDialog<void>(
@@ -5060,22 +5192,15 @@ DateTime? _fimFiltroRevisao;
 
         return AlertDialog(
           backgroundColor: cores.primaryContainer,
-          icon: Icon(
-            Icons.info_outline,
-            color: cores.onPrimaryContainer,
-          ),
+          icon: Icon(Icons.info_outline, color: cores.onPrimaryContainer),
           title: Text(
             titulo,
-            style: TextStyle(
-              color: cores.onPrimaryContainer,
-            ),
+            style: TextStyle(color: cores.onPrimaryContainer),
           ),
           content: SingleChildScrollView(
             child: Text(
               mensagem,
-              style: TextStyle(
-                color: cores.onPrimaryContainer,
-              ),
+              style: TextStyle(color: cores.onPrimaryContainer),
             ),
           ),
           actions: [
@@ -5094,12 +5219,11 @@ DateTime? _fimFiltroRevisao;
     );
   }
 
-    Future<void> _criarRegraDoItem(ItemExtrato item) async {
+  Future<void> _criarRegraDoItem(ItemExtrato item) async {
     int? categoriaId;
 
     for (final categoria in widget.categorias) {
-      if (categoria.tipo == item.tipo &&
-          categoria.nome == item.categoria) {
+      if (categoria.tipo == item.tipo && categoria.nome == item.categoria) {
         categoriaId = categoria.id;
         break;
       }
@@ -5109,7 +5233,7 @@ DateTime? _fimFiltroRevisao;
       await _mostrarAvisoRevisao(
         'Escolha a categoria primeiro',
         'Resolva o conflito de categorias deste item '
-        'antes de criar uma nova regra.',
+            'antes de criar uma nova regra.',
       );
       return;
     }
@@ -5145,24 +5269,25 @@ DateTime? _fimFiltroRevisao;
       await _mostrarAvisoRevisao(
         'Selecione apenas um tipo',
         'Para alterar a categoria em grupo, selecione '
-        'somente entradas ou somente saídas.\n\n'
-        'Use o filtro Tipo para facilitar a seleção.',
+            'somente entradas ou somente saídas.\n\n'
+            'Use o filtro Tipo para facilitar a seleção.',
       );
       return;
     }
 
-    final nomes = widget.categorias
-        .where((categoria) => categoria.tipo == tipo)
-        .map((categoria) => categoria.nome)
-        .toSet()
-        .toList()
-      ..sort();
+    final nomes =
+        widget.categorias
+            .where((categoria) => categoria.tipo == tipo)
+            .map((categoria) => categoria.nome)
+            .toSet()
+            .toList()
+          ..sort();
 
-        if (nomes.isEmpty) {
+    if (nomes.isEmpty) {
       await _mostrarAvisoRevisao(
         'Nenhuma categoria disponível',
         'Crie uma categoria para esse tipo de movimentação '
-        'antes de continuar.',
+            'antes de continuar.',
       );
       return;
     }
@@ -5178,9 +5303,7 @@ DateTime? _fimFiltroRevisao;
               ListTile(
                 title: Text(
                   'Categoria para ${itens.length} movimentações',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: const Text(
                   'A escolha será aplicada a todos os itens '
@@ -5239,18 +5362,14 @@ DateTime? _fimFiltroRevisao;
     });
   }
 
-    Future<void> _confirmar() async {
+  Future<void> _confirmar() async {
     final selecionados = widget.itens
         .where((item) => item.selecionado)
         .toList();
 
     if (selecionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Selecione pelo menos uma movimentação.',
-          ),
-        ),
+        const SnackBar(content: Text('Selecione pelo menos uma movimentação.')),
       );
 
       return;
@@ -5264,11 +5383,11 @@ DateTime? _fimFiltroRevisao;
       await _mostrarAvisoRevisao(
         'Revise as categorias',
         '$conflitos movimentações selecionadas possuem '
-        'regras indicando categorias diferentes.\n\n'
-        'Escolha a categoria desses itens, individualmente '
-        'ou em grupo, ou desmarque-os para não importar.\n\n'
-        'Se algum item estiver oculto, ajuste os filtros '
-        'para encontrá-lo.',
+            'regras indicando categorias diferentes.\n\n'
+            'Escolha a categoria desses itens, individualmente '
+            'ou em grupo, ou desmarque-os para não importar.\n\n'
+            'Se algum item estiver oculto, ajuste os filtros '
+            'para encontrá-lo.',
       );
       return;
     }
@@ -5287,17 +5406,17 @@ DateTime? _fimFiltroRevisao;
               child: Text(
                 quantidadeSuspeita == 1
                     ? 'Uma movimentação selecionada pode estar '
-                        'duplicada.\n\n'
-                        'Confira antes de continuar para evitar '
-                        'contar o mesmo valor duas vezes. '
-                        'Se for uma movimentação diferente, '
-                        'você pode importá-la mesmo assim.'
+                          'duplicada.\n\n'
+                          'Confira antes de continuar para evitar '
+                          'contar o mesmo valor duas vezes. '
+                          'Se for uma movimentação diferente, '
+                          'você pode importá-la mesmo assim.'
                     : '$quantidadeSuspeita movimentações selecionadas '
-                        'podem estar duplicadas.\n\n'
-                        'Confira antes de continuar para evitar '
-                        'contar os mesmos valores duas vezes. '
-                        'Se forem movimentações diferentes, '
-                        'você pode importá-las mesmo assim.',
+                          'podem estar duplicadas.\n\n'
+                          'Confira antes de continuar para evitar '
+                          'contar os mesmos valores duas vezes. '
+                          'Se forem movimentações diferentes, '
+                          'você pode importá-las mesmo assim.',
               ),
             ),
             actions: [
@@ -5325,253 +5444,212 @@ DateTime? _fimFiltroRevisao;
 
     if (!mounted) return;
 
-    Navigator.pop(
-      context,
-      selecionados,
-    );
+    Navigator.pop(context, selecionados);
   }
 
   String get _textoPeriodoFiltro {
-  switch (_periodoFiltroRevisao) {
-    case PeriodoFiltro.esteMes:
-      return 'Este mês';
-    case PeriodoFiltro.mesPassado:
-      return 'Mês passado';
-    case PeriodoFiltro.esteAno:
-      return 'Este ano';
-    case PeriodoFiltro.todos:
-      return 'Período';
-    case PeriodoFiltro.personalizado:
-      if (_inicioFiltroRevisao == null ||
-          _fimFiltroRevisao == null) {
+    switch (_periodoFiltroRevisao) {
+      case PeriodoFiltro.esteMes:
+        return 'Este mês';
+      case PeriodoFiltro.mesPassado:
+        return 'Mês passado';
+      case PeriodoFiltro.esteAno:
+        return 'Este ano';
+      case PeriodoFiltro.todos:
         return 'Período';
-      }
+      case PeriodoFiltro.personalizado:
+        if (_inicioFiltroRevisao == null || _fimFiltroRevisao == null) {
+          return 'Período';
+        }
 
-      return '${_dataFormatada(_inicioFiltroRevisao!)} - '
-          '${_dataFormatada(_fimFiltroRevisao!)}';
+        return '${_dataFormatada(_inicioFiltroRevisao!)} - '
+            '${_dataFormatada(_fimFiltroRevisao!)}';
+    }
   }
-}
 
-Future<void> _abrirFiltroCategoria() async {
-  final nomes = widget.categorias
-      .map((categoria) => categoria.nome)
-      .toSet()
-      .toList()
-    ..sort();
+  Future<void> _abrirFiltroCategoria() async {
+    final nomes =
+        widget.categorias.map((categoria) => categoria.nome).toSet().toList()
+          ..sort();
 
-  final selecionada = await showModalBottomSheet<String>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      return SafeArea(
-        child: RadioGroup<String>(
-          groupValue: _categoriaFiltro,
-          onChanged: (valor) => Navigator.pop(context, valor),
-          child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(
-              title: Text(
-                'Categoria',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: Radio<String>(
-                value: 'Todas',
-              ),
-              title: const Text('Todas'),
-              onTap: () {
-                Navigator.pop(context, 'Todas');
-              },
-            ),
-            ...nomes.map(
-              (nome) => ListTile(
-                leading: Radio<String>(
-                  value: nome,
-                ),
-                title: Text(nome),
-                onTap: () {
-                  Navigator.pop(context, nome);
-                },
-              ),
-            ),
-          ],
-          ),
-        ),
-      );
-    },
-  );
-
-  if (!mounted || selecionada == null) return;
-
-  setState(() {
-    _categoriaFiltro = selecionada;
-  });
-}
-
-Future<void> _abrirFiltroTipo() async {
-  final selecionado =
-      await showModalBottomSheet<TipoMovimentacao?>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ListTile(
-              title: Text(
-                'Tipo',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ListTile(
-              title: const Text('Todos'),
-              onTap: () {
-                Navigator.pop(context, null);
-              },
-            ),
-            ListTile(
-              title: const Text('Entradas'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  TipoMovimentacao.receita,
-                );
-              },
-            ),
-            ListTile(
-              title: const Text('Saídas'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  TipoMovimentacao.despesa,
-                );
-              },
-            ),
-          ],
-        ),
-      );
-    },
-  );
-
-  if (!mounted) return;
-
-  setState(() {
-    _tipoFiltro = selecionado;
-  });
-}
-
-Future<void> _abrirFiltroPeriodo() async {
-  final selecionado =
-      await showModalBottomSheet<PeriodoFiltro>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ListTile(
-              title: Text(
-                'Período',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ListTile(
-              title: const Text('Todo o período'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.todos,
-                );
-              },
-            ),
-            ListTile(
-              title: const Text('Este mês'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.esteMes,
-                );
-              },
-            ),
-            ListTile(
-              title: const Text('Mês passado'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.mesPassado,
-                );
-              },
-            ),
-            ListTile(
-              title: const Text('Este ano'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.esteAno,
-                );
-              },
-            ),
-            ListTile(
-              title: const Text('Personalizado'),
-              onTap: () {
-                Navigator.pop(
-                  context,
-                  PeriodoFiltro.personalizado,
-                );
-              },
-            ),
-          ],
-        ),
-      );
-    },
-  );
-
-  if (!mounted || selecionado == null) return;
-
-  if (selecionado == PeriodoFiltro.personalizado) {
-    final intervalo = await showDateRangePicker(
+    final selecionada = await showModalBottomSheet<String>(
       context: context,
-      locale: const Locale('pt', 'BR'),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-      initialDateRange:
-          _inicioFiltroRevisao != null &&
-                  _fimFiltroRevisao != null
-              ? DateTimeRange(
-                  start: _inicioFiltroRevisao!,
-                  end: _fimFiltroRevisao!,
-                )
-              : null,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: RadioGroup<String>(
+            groupValue: _categoriaFiltro,
+            onChanged: (valor) => Navigator.pop(context, valor),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                const ListTile(
+                  title: Text(
+                    'Categoria',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ListTile(
+                  leading: Radio<String>(value: 'Todas'),
+                  title: const Text('Todas'),
+                  onTap: () {
+                    Navigator.pop(context, 'Todas');
+                  },
+                ),
+                ...nomes.map(
+                  (nome) => ListTile(
+                    leading: Radio<String>(value: nome),
+                    title: Text(nome),
+                    onTap: () {
+                      Navigator.pop(context, nome);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
 
-    if (!mounted || intervalo == null) return;
+    if (!mounted || selecionada == null) return;
 
     setState(() {
-      _periodoFiltroRevisao =
-          PeriodoFiltro.personalizado;
-      _inicioFiltroRevisao = intervalo.start;
-      _fimFiltroRevisao = intervalo.end;
+      _categoriaFiltro = selecionada;
     });
-
-    return;
   }
 
-  setState(() {
-    _periodoFiltroRevisao = selecionado;
-    _inicioFiltroRevisao = null;
-    _fimFiltroRevisao = null;
-  });
-}
+  Future<void> _abrirFiltroTipo() async {
+    final selecionado = await showModalBottomSheet<TipoMovimentacao?>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text(
+                  'Tipo',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                title: const Text('Todos'),
+                onTap: () {
+                  Navigator.pop(context, null);
+                },
+              ),
+              ListTile(
+                title: const Text('Entradas'),
+                onTap: () {
+                  Navigator.pop(context, TipoMovimentacao.receita);
+                },
+              ),
+              ListTile(
+                title: const Text('Saídas'),
+                onTap: () {
+                  Navigator.pop(context, TipoMovimentacao.despesa);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _tipoFiltro = selecionado;
+    });
+  }
+
+  Future<void> _abrirFiltroPeriodo() async {
+    final selecionado = await showModalBottomSheet<PeriodoFiltro>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text(
+                  'Período',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                title: const Text('Todo o período'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.todos);
+                },
+              ),
+              ListTile(
+                title: const Text('Este mês'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.esteMes);
+                },
+              ),
+              ListTile(
+                title: const Text('Mês passado'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.mesPassado);
+                },
+              ),
+              ListTile(
+                title: const Text('Este ano'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.esteAno);
+                },
+              ),
+              ListTile(
+                title: const Text('Personalizado'),
+                onTap: () {
+                  Navigator.pop(context, PeriodoFiltro.personalizado);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selecionado == null) return;
+
+    if (selecionado == PeriodoFiltro.personalizado) {
+      final intervalo = await showDateRangePicker(
+        context: context,
+        locale: const Locale('pt', 'BR'),
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+        initialDateRange:
+            _inicioFiltroRevisao != null && _fimFiltroRevisao != null
+            ? DateTimeRange(
+                start: _inicioFiltroRevisao!,
+                end: _fimFiltroRevisao!,
+              )
+            : null,
+      );
+
+      if (!mounted || intervalo == null) return;
+
+      setState(() {
+        _periodoFiltroRevisao = PeriodoFiltro.personalizado;
+        _inicioFiltroRevisao = intervalo.start;
+        _fimFiltroRevisao = intervalo.end;
+      });
+
+      return;
+    }
+
+    setState(() {
+      _periodoFiltroRevisao = selecionado;
+      _inicioFiltroRevisao = null;
+      _fimFiltroRevisao = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -5580,20 +5658,14 @@ Future<void> _abrirFiltroPeriodo() async {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _editandoCategorias
-              ? 'Alterar categorias'
-              : 'Revisar extrato',
+          _editandoCategorias ? 'Alterar categorias' : 'Revisar extrato',
         ),
         actions: [
           IconButton(
             tooltip: _editandoCategorias
                 ? 'Cancelar edição em grupo'
                 : 'Alterar categorias em grupo',
-            icon: Icon(
-              _editandoCategorias
-                  ? Icons.close
-                  : Icons.edit_note,
-            ),
+            icon: Icon(_editandoCategorias ? Icons.close : Icons.edit_note),
             onPressed: _alternarEdicaoCategorias,
           ),
         ],
@@ -5614,204 +5686,213 @@ Future<void> _abrirFiltroPeriodo() async {
 
       body: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(child: Column(children: [
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(
-              16,
-              8,
-              16,
-              8,
-            ),
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: esquema.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(RaioBorda.cartao),
-              border: Border.all(
-                color: esquema.outlineVariant.withValues(alpha: 0.7),
-              ),
-            ),
+          SliverToBoxAdapter(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: esquema.primaryContainer.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.fact_check_outlined,
-                        color: esquema.primary,
-                      ),
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: esquema.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(RaioBorda.cartao),
+                    border: Border.all(
+                      color: esquema.outlineVariant.withValues(alpha: 0.7),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        widget.nomeArquivo == null ? 'Confira antes de importar' : 'Confira: ${widget.nomeArquivo}',
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: esquema.primaryContainer.withValues(
+                                alpha: 0.65,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.fact_check_outlined,
+                              color: esquema.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              widget.nomeArquivo == null
+                                  ? 'Confira antes de importar'
+                                  : 'Confira: ${widget.nomeArquivo}',
+                              style: TextStyle(
+                                color: esquema.onSurface,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      if (widget.resultado != null) ...[
+                        Text(
+                          'Formato detectado: ${widget.resultado!.banco.nome}',
+                          style: TextStyle(color: esquema.onSurfaceVariant),
+                        ),
+                        Text(
+                          'Conta de origem: ${widget.conta?.rotulo ?? "Não informada"}',
+                          style: TextStyle(color: esquema.onSurfaceVariant),
+                        ),
+                        Text(
+                          'Valores: ${widget.resultado!.decimal == "," ? "1.234,56" : "1,234.56"} • Datas: ${widget.resultado!.formatoData == "mda"
+                              ? "mês/dia/ano"
+                              : widget.resultado!.formatoData == "amd"
+                              ? "ano/mês/dia"
+                              : "dia/mês/ano"}',
+                          style: TextStyle(color: esquema.onSurfaceVariant),
+                        ),
+                        if (widget.resultado!.ocorrencias.isNotEmpty)
+                          TextButton(
+                            onPressed: () => showDialog<void>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Linhas não importadas'),
+                                content: SizedBox(
+                                  width: double.maxFinite,
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount:
+                                        widget.resultado!.ocorrencias.length,
+                                    itemBuilder: (_, i) {
+                                      final o =
+                                          widget.resultado!.ocorrencias[i];
+                                      return ListTile(
+                                        title: Text('Linha ${o.linha}'),
+                                        subtitle: Text(o.motivo),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text('Fechar'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            child: Text(
+                              '${widget.resultado!.ocorrencias.length} linhas descartadas — ver motivos',
+                            ),
+                          ),
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.pop(context, <ItemExtrato>[]),
+                          child: const Text('Ajustar colunas do arquivo'),
+                        ),
+                      ],
+                      Text(
+                        '${widget.itens.length} movimentações encontradas',
                         style: TextStyle(
-                          color: esquema.onSurface,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
+                          color: esquema.onSurfaceVariant,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
-                    ),
-                  ],
-                ),
 
-                const SizedBox(height: 10),
+                      const SizedBox(height: 4),
 
-                if (widget.resultado != null) ...[
-                  Text(
-                    'Formato detectado: ${widget.resultado!.banco.nome}',
-                    style: TextStyle(color: esquema.onSurfaceVariant),
-                  ),
-                  Text(
-                    'Conta de origem: ${widget.conta?.rotulo ?? "Não informada"}',
-                    style: TextStyle(color: esquema.onSurfaceVariant),
-                  ),
-                  Text(
-                    'Valores: ${widget.resultado!.decimal == "," ? "1.234,56" : "1,234.56"} • Datas: ${widget.resultado!.formatoData == "mda" ? "mês/dia/ano" : widget.resultado!.formatoData == "amd" ? "ano/mês/dia" : "dia/mês/ano"}',
-                    style: TextStyle(color: esquema.onSurfaceVariant),
-                  ),
-                  if (widget.resultado!.ocorrencias.isNotEmpty)
-                    TextButton(onPressed: () => showDialog<void>(context: context, builder: (ctx) => AlertDialog(
-                      title: const Text('Linhas não importadas'),
-                      content: SizedBox(width: double.maxFinite, child: ListView.builder(shrinkWrap: true,
-                        itemCount: widget.resultado!.ocorrencias.length,
-                        itemBuilder: (_, i) { final o = widget.resultado!.ocorrencias[i];
-                          return ListTile(title: Text('Linha ${o.linha}'), subtitle: Text(o.motivo)); })),
-                      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar'))])),
-                      child: Text('${widget.resultado!.ocorrencias.length} linhas descartadas — ver motivos')),
-                  TextButton(onPressed: () => Navigator.pop(context, <ItemExtrato>[]), child: const Text('Ajustar colunas do arquivo')),
-                ],
-                Text(
-                  '${widget.itens.length} movimentações encontradas',
-                  style: TextStyle(
-                    color: esquema.onSurfaceVariant,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                      Text(
+                        '$_quantidadeSelecionada selecionadas para importação • ${widget.itens.where((i) => i.selecionado && !i.ativa).length} desativadas',
+                        style: TextStyle(
+                          color: esquema.primary,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
-                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          _selecionarTodos(true);
+                        },
+                        icon: const Icon(Icons.check_box_outlined),
+                        label: const Text('Selecionar todos'),
+                      ),
 
-                Text(
-                  '$_quantidadeSelecionada selecionadas para importação • ${widget.itens.where((i) => i.selecionado && !i.ativa).length} desativadas',
-                  style: TextStyle(
-                    color: esquema.primary,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                      TextButton(
+                        onPressed: () {
+                          _selecionarTodos(false);
+                        },
+                        child: const Text('Limpar seleção'),
+                      ),
+                    ],
                   ),
                 ),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.category_outlined, size: 18),
+                        label: Text(
+                          _categoriaFiltro == 'Todas'
+                              ? 'Categoria'
+                              : _categoriaFiltro,
+                        ),
+                        onPressed: _abrirFiltroCategoria,
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.swap_vert, size: 18),
+                        label: Text(
+                          _tipoFiltro == null
+                              ? 'Tipo'
+                              : _tipoFiltro == TipoMovimentacao.receita
+                              ? 'Entradas'
+                              : 'Saídas',
+                        ),
+                        onPressed: _abrirFiltroTipo,
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.date_range_outlined, size: 18),
+                        label: Text(_textoPeriodoFiltro),
+                        onPressed: _abrirFiltroPeriodo,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Divider(),
               ],
             ),
           ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              children: [
-                TextButton.icon(
-                  onPressed: () {
-                    _selecionarTodos(true);
-                  },
-                  icon: const Icon(
-                    Icons.check_box_outlined,
-                  ),
-                  label: const Text(
-                    'Selecionar todos',
-                  ),
-                ),
-
-
-                TextButton(
-                  onPressed: () {
-                    _selecionarTodos(false);
-                  },
-                  child: const Text(
-                    'Limpar seleção',
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          Padding(
-  padding: const EdgeInsets.symmetric(
-    horizontal: 16,
-    vertical: 8,
-  ),
-  child: Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      OutlinedButton.icon(
-        icon: const Icon(
-          Icons.category_outlined,
-          size: 18,
-        ),
-        label: Text(
-          _categoriaFiltro == 'Todas'
-              ? 'Categoria'
-              : _categoriaFiltro,
-        ),
-        onPressed: _abrirFiltroCategoria,
-      ),
-      OutlinedButton.icon(
-        icon: const Icon(
-          Icons.swap_vert,
-          size: 18,
-        ),
-        label: Text(
-          _tipoFiltro == null
-              ? 'Tipo'
-              : _tipoFiltro ==
-                      TipoMovimentacao.receita
-                  ? 'Entradas'
-                  : 'Saídas',
-        ),
-        onPressed: _abrirFiltroTipo,
-      ),
-      OutlinedButton.icon(
-        icon: const Icon(
-          Icons.date_range_outlined,
-          size: 18,
-        ),
-        label: Text(
-          _textoPeriodoFiltro,
-        ),
-        onPressed: _abrirFiltroPeriodo,
-      ),
-    ],
-  ),
-),
-
-
-          const Divider(),
-
-          ])),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
             sliver: SliverList.builder(
               itemCount: _itensVisiveis.length,
               itemBuilder: (context, index) {
-                final item = _itensVisiveis [index];
+                final item = _itensVisiveis[index];
 
-                final receita =
-                    item.tipo ==
-                    TipoMovimentacao.receita;
+                final receita = item.tipo == TipoMovimentacao.receita;
                 final corTipo = receita ? semantica.receita : semantica.despesa;
 
                 return Card(
-                  margin: const EdgeInsets.only(
-                    bottom: 10,
-                  ),
+                  margin: const EdgeInsets.only(bottom: 10),
                   elevation: 0,
                   color: esquema.surfaceContainerLow,
                   shape: RoundedRectangleBorder(
@@ -5821,12 +5902,7 @@ Future<void> _abrirFiltroPeriodo() async {
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      8,
-                      8,
-                      12,
-                      12,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(8, 8, 12, 12),
                     child: Column(
                       children: [
                         Align(
@@ -5884,37 +5960,51 @@ Future<void> _abrirFiltroPeriodo() async {
 
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     item.descricao,
                                     style: const TextStyle(
-                                      fontWeight:
-                                          FontWeight.w600,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   if (item.contabilizacaoSugerida != null) ...[
                                     const SizedBox(height: 8),
-                                    Text('Sua preferência nesta conta: contabilização ${item.contabilizacaoSugerida! ? 'ativa' : 'desativada'}.'),
-                                    const Text('Sugestão pela mesma descrição e tipo. Você decide se deseja aplicar.'),
+                                    Text(
+                                      'Sua preferência nesta conta: contabilização ${item.contabilizacaoSugerida! ? 'ativa' : 'desativada'}.',
+                                    ),
+                                    const Text(
+                                      'Sugestão pela mesma descrição e tipo. Você decide se deseja aplicar.',
+                                    ),
                                     TextButton(
                                       onPressed: () => setState(() {
-                                        item.ativa = item.contabilizacaoSugerida!;
+                                        item.ativa =
+                                            item.contabilizacaoSugerida!;
                                         item.contabilizacaoSugerida = null;
                                       }),
                                       child: const Text('Aplicar sugestão'),
                                     ),
                                   ],
-                                  if (item.possivelInvestimento || item.contabilizacaoSugerida != null || !item.ativa) ...[
+                                  if (item.possivelInvestimento ||
+                                      item.contabilizacaoSugerida != null ||
+                                      !item.ativa) ...[
                                     const SizedBox(height: 8),
-                                    Text(item.possivelInvestimento ? 'Possível aplicação ou resgate. Deseja contabilizar nos totais?' : 'Incluir esta movimentação nos totais?'),
+                                    Text(
+                                      item.possivelInvestimento
+                                          ? 'Possível aplicação ou resgate. Deseja contabilizar nos totais?'
+                                          : 'Incluir esta movimentação nos totais?',
+                                    ),
                                     SwitchListTile.adaptive(
                                       contentPadding: EdgeInsets.zero,
                                       title: const Text('Contabilizar'),
-                                      subtitle: Text(item.ativa ? 'Será incluída nos totais.' : 'Será importada desativada, mantendo o registro no histórico.'),
+                                      subtitle: Text(
+                                        item.ativa
+                                            ? 'Será incluída nos totais.'
+                                            : 'Será importada desativada, mantendo o registro no histórico.',
+                                      ),
                                       value: item.ativa,
-                                      onChanged: (valor) => setState(() => item.ativa = valor),
+                                      onChanged: (valor) =>
+                                          setState(() => item.ativa = valor),
                                     ),
                                   ],
                                   if (item.conflitoDeRegras)
@@ -5954,9 +6044,7 @@ Future<void> _abrirFiltroPeriodo() async {
                                   const SizedBox(height: 4),
 
                                   Text(
-                                    _dataFormatada(
-                                      item.data,
-                                    ),
+                                    _dataFormatada(item.data),
                                     style: TextStyle(
                                       color: esquema.onSurfaceVariant,
                                       fontSize: 13,
@@ -5971,8 +6059,7 @@ Future<void> _abrirFiltroPeriodo() async {
                               '${_dinheiro(item.valor)}',
                               style: TextStyle(
                                 color: corTipo,
-                                fontWeight:
-                                    FontWeight.w700,
+                                fontWeight: FontWeight.w700,
                                 fontFeatures: const [
                                   FontFeature.tabularFigures(),
                                 ],
@@ -5997,44 +6084,40 @@ Future<void> _abrirFiltroPeriodo() async {
 
                             Expanded(
                               child: DropdownButton<String>(
-                                value: widget.categorias
-        .where(
-          (categoria) =>
-              categoria.tipo == item.tipo,
-        )
-        .any(
-          (categoria) =>
-              categoria.nome == item.categoria,
-        )
-    ? item.categoria
-    : null,
+                                value:
+                                    widget.categorias
+                                        .where(
+                                          (categoria) =>
+                                              categoria.tipo == item.tipo,
+                                        )
+                                        .any(
+                                          (categoria) =>
+                                              categoria.nome == item.categoria,
+                                        )
+                                    ? item.categoria
+                                    : null,
                                 isExpanded: true,
-                                underline:
-                                    const SizedBox.shrink(),
+                                underline: const SizedBox.shrink(),
                                 items: widget.categorias
-    .where(
-      (categoria) =>
-          categoria.tipo == item.tipo,
-    )
-    .fold<Map<String, Categoria>>(
-      {},
-      (mapa, categoria) {
-        mapa[categoria.nome] = categoria;
-        return mapa;
-      },
-    )
-    .values
-    .map(
-      (categoria) {
-        return DropdownMenuItem<String>(
-          value: categoria.nome,
-          child: Text(
-            categoria.nome,
-          ),
-        );
-      },
-    )
-    .toList(),
+                                    .where(
+                                      (categoria) =>
+                                          categoria.tipo == item.tipo,
+                                    )
+                                    .fold<Map<String, Categoria>>({}, (
+                                      mapa,
+                                      categoria,
+                                    ) {
+                                      mapa[categoria.nome] = categoria;
+                                      return mapa;
+                                    })
+                                    .values
+                                    .map((categoria) {
+                                      return DropdownMenuItem<String>(
+                                        value: categoria.nome,
+                                        child: Text(categoria.nome),
+                                      );
+                                    })
+                                    .toList(),
                                 onChanged: (categoria) {
                                   if (categoria == null) {
                                     return;
@@ -6060,17 +6143,12 @@ Future<void> _abrirFiltroPeriodo() async {
       ),
 
       bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(
-          16,
-          8,
-          16,
-          16,
-        ),
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: FilledButton.icon(
           onPressed: _editandoCategorias
               ? (_itensParaCategorizar.isEmpty
-                  ? null
-                  : _categorizarSelecionados)
+                    ? null
+                    : _categorizarSelecionados)
               : _confirmar,
           icon: Icon(
             _editandoCategorias
@@ -6082,9 +6160,7 @@ Future<void> _abrirFiltroPeriodo() async {
                 ? 'Categorizar ${_itensParaCategorizar.length} itens'
                 : 'Importar $_quantidadeSelecionada movimentações',
           ),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(54),
-          ),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
         ),
       ),
     );
@@ -6099,8 +6175,7 @@ class TelaImportacoes extends StatefulWidget {
   const TelaImportacoes({super.key});
 
   @override
-  State<TelaImportacoes> createState() =>
-      _TelaImportacoesState();
+  State<TelaImportacoes> createState() => _TelaImportacoesState();
 }
 
 class _TelaImportacoesState extends State<TelaImportacoes> {
@@ -6173,19 +6248,14 @@ class _TelaImportacoesState extends State<TelaImportacoes> {
 
       if (confirmar != true || !mounted) return;
 
-      await BancoDados.instancia.excluirImportacao(
-        lote['id'] as int,
-      );
+      await BancoDados.instancia.excluirImportacao(lote['id'] as int);
 
       if (!mounted) return;
 
       _recarregar();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Importação excluída.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Importação excluída.')));
     } catch (_) {
       if (!mounted) return;
 
@@ -6210,9 +6280,7 @@ class _TelaImportacoesState extends State<TelaImportacoes> {
   Widget build(BuildContext context) {
     final esquema = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Importações'),
-      ),
+      appBar: AppBar(title: const Text('Importações')),
       body: Column(
         children: [
           Padding(
@@ -6229,11 +6297,7 @@ class _TelaImportacoesState extends State<TelaImportacoes> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 20,
-                    color: esquema.primary,
-                  ),
+                  Icon(Icons.info_outline, size: 20, color: esquema.primary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -6251,17 +6315,13 @@ class _TelaImportacoesState extends State<TelaImportacoes> {
               ),
             ),
           ),
-          if (_excluindo)
-            const LinearProgressIndicator(),
+          if (_excluindo) const LinearProgressIndicator(),
           Expanded(
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _consulta,
               builder: (context, snapshot) {
-                if (snapshot.connectionState !=
-                    ConnectionState.done) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
                 if (snapshot.hasError) {
@@ -6269,9 +6329,7 @@ class _TelaImportacoesState extends State<TelaImportacoes> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'Não foi possível carregar as importações.',
-                        ),
+                        const Text('Não foi possível carregar as importações.'),
                         TextButton(
                           onPressed: _recarregar,
                           child: const Text('Tentar novamente'),
@@ -6342,9 +6400,7 @@ class _TelaImportacoesState extends State<TelaImportacoes> {
                         trailing: IconButton(
                           tooltip: 'Excluir importação',
                           icon: const Icon(Icons.delete_outline),
-                          onPressed: _excluindo
-                              ? null
-                              : () => _excluir(lote),
+                          onPressed: _excluindo ? null : () => _excluir(lote),
                         ),
                       ),
                     );
@@ -6363,8 +6419,7 @@ class TelaGerenciarDados extends StatefulWidget {
   const TelaGerenciarDados({super.key});
 
   @override
-  State<TelaGerenciarDados> createState() =>
-      _TelaGerenciarDadosState();
+  State<TelaGerenciarDados> createState() => _TelaGerenciarDadosState();
 }
 
 class _TelaGerenciarDadosState extends State<TelaGerenciarDados> {
@@ -6403,10 +6458,8 @@ class _TelaGerenciarDadosState extends State<TelaGerenciarDados> {
               ),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  backgroundColor:
-                      Theme.of(dialogContext).colorScheme.error,
-                  foregroundColor:
-                      Theme.of(dialogContext).colorScheme.onError,
+                  backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                  foregroundColor: Theme.of(dialogContext).colorScheme.onError,
                 ),
                 onPressed: () {
                   Navigator.pop(dialogContext, true);
@@ -6437,9 +6490,7 @@ class _TelaGerenciarDadosState extends State<TelaGerenciarDados> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Dados apagados e categorias padrão restauradas.',
-          ),
+          content: Text('Dados apagados e categorias padrão restauradas.'),
         ),
       );
     } catch (_) {
@@ -6466,12 +6517,33 @@ class _TelaGerenciarDadosState extends State<TelaGerenciarDados> {
   Widget build(BuildContext context) {
     final esquema = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gerenciar dados'),
-      ),
+      appBar: AppBar(title: const Text('Gerenciar dados')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.backup_outlined),
+              title: const Text('Backup integral'),
+              subtitle: const Text('Crie uma cópia de todos os perfis'),
+              trailing: const Icon(Icons.chevron_right),
+              enabled: !_restaurando,
+              onTap: _restaurando
+                  ? null
+                  : () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TelaBackup(
+                          servico: ServicoBackup(
+                            catalogo: CadastroPerfis.database,
+                            abrirPerfil: abrirPerfilParaBackup,
+                            fecharPerfis: true,
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+          ),
           Card(
             elevation: 0,
             color: esquema.surfaceContainerLow,
@@ -6504,9 +6576,7 @@ class _TelaGerenciarDadosState extends State<TelaGerenciarDados> {
                 'Importações',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text(
-                'Veja e exclua extratos importados',
-              ),
+              subtitle: const Text('Veja e exclua extratos importados'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _restaurando
                   ? null
@@ -6543,19 +6613,13 @@ class _TelaGerenciarDadosState extends State<TelaGerenciarDados> {
                   color: esquema.errorContainer.withValues(alpha: 0.65),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  Icons.restart_alt,
-                  color: esquema.error,
-                  size: 20,
-                ),
+                child: Icon(Icons.restart_alt, color: esquema.error, size: 20),
               ),
               title: const Text(
-                'Restaurar perfil atual',
+                'Apagar dados do perfil atual',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text(
-                'Apague os dados apenas do perfil em uso',
-              ),
+              subtitle: const Text('Apague os dados apenas do perfil em uso'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _restaurando ? null : _restaurar,
             ),
@@ -6563,9 +6627,7 @@ class _TelaGerenciarDadosState extends State<TelaGerenciarDados> {
           if (_restaurando)
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: Center(child: CircularProgressIndicator()),
             ),
         ],
       ),
@@ -6612,7 +6674,7 @@ class _TelaAparenciaState extends State<TelaAparencia> {
     }
   }
 
-    Future<void> _selecionarCor(String nome) async {
+  Future<void> _selecionarCor(String nome) async {
     if (_salvando || corTema.value == nome) return;
 
     setState(() {
@@ -6626,9 +6688,7 @@ class _TelaAparenciaState extends State<TelaAparencia> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Não foi possível salvar a cor. Tente novamente.',
-          ),
+          content: Text('Não foi possível salvar a cor. Tente novamente.'),
         ),
       );
     } finally {
@@ -6649,13 +6709,16 @@ class _TelaAparenciaState extends State<TelaAparencia> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Não foi possível salvar o tamanho do texto. Tente novamente.'),
+          content: Text(
+            'Não foi possível salvar o tamanho do texto. Tente novamente.',
+          ),
         ),
       );
     } finally {
       if (mounted) setState(() => _salvando = false);
     }
   }
+
   Widget _opcao({
     required ThemeMode modo,
     required ThemeMode atual,
@@ -6678,9 +6741,7 @@ class _TelaAparenciaState extends State<TelaAparencia> {
           color: selecionado
               ? Theme.of(context).colorScheme.primary
               : Theme.of(context).colorScheme.onSurfaceVariant,
-          semanticLabel: selecionado
-              ? 'Selecionado'
-              : 'Não selecionado',
+          semanticLabel: selecionado ? 'Selecionado' : 'Não selecionado',
         ),
         onTap: _salvando ? null : () => _selecionar(modo),
       ),
@@ -6697,18 +6758,20 @@ class _TelaAparenciaState extends State<TelaAparencia> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: cores.outlineVariant),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: conteudo,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: conteudo,
+        ),
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Aparência'),
-      ),
+      appBar: AppBar(title: const Text('Aparência')),
       body: ValueListenableBuilder<ThemeMode>(
         valueListenable: modoTema,
         builder: (context, atual, child) {
@@ -6716,46 +6779,40 @@ class _TelaAparenciaState extends State<TelaAparencia> {
             padding: const EdgeInsets.all(16),
             children: [
               _secaoAparencia([
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Modo de aparência',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Modo de aparência',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ),
-              _opcao(
-                modo: ThemeMode.system,
-                atual: atual,
-                titulo: 'Sistema',
-                descricao: 'Acompanha a aparência do celular',
-                icone: Icons.brightness_auto_outlined,
-              ),
-              _opcao(
-                modo: ThemeMode.light,
-                atual: atual,
-                titulo: 'Claro',
-                descricao: 'Mantém o aplicativo claro',
-                icone: Icons.light_mode_outlined,
-              ),
-              _opcao(
-                modo: ThemeMode.dark,
-                atual: atual,
-                titulo: 'Escuro',
-                descricao: 'Mantém o aplicativo escuro',
-                icone: Icons.dark_mode_outlined,
-              ),
+                _opcao(
+                  modo: ThemeMode.system,
+                  atual: atual,
+                  titulo: 'Sistema',
+                  descricao: 'Acompanha a aparência do celular',
+                  icone: Icons.brightness_auto_outlined,
+                ),
+                _opcao(
+                  modo: ThemeMode.light,
+                  atual: atual,
+                  titulo: 'Claro',
+                  descricao: 'Mantém o aplicativo claro',
+                  icone: Icons.light_mode_outlined,
+                ),
+                _opcao(
+                  modo: ThemeMode.dark,
+                  atual: atual,
+                  titulo: 'Escuro',
+                  descricao: 'Mantém o aplicativo escuro',
+                  icone: Icons.dark_mode_outlined,
+                ),
               ]),
               const SizedBox(height: 24),
               _secaoAparencia([
                 const Text(
                   'Tema visual',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -6803,6 +6860,17 @@ class _TelaAparenciaState extends State<TelaAparencia> {
                               setState(() => _salvando = true);
                               try {
                                 await alterarOcultarValores(novo);
+                              } catch (_) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(this.context)
+                                      .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Não foi possível salvar a preferência.',
+                                          ),
+                                        ),
+                                      );
+                                }
                               } finally {
                                 if (mounted) {
                                   setState(() => _salvando = false);
@@ -6815,32 +6883,38 @@ class _TelaAparenciaState extends State<TelaAparencia> {
               ]),
               const SizedBox(height: 24),
               _secaoAparencia([
-              const Text(
-                'Tamanho do texto',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text('Ajuste a leitura do aplicativo.'),
-              const SizedBox(height: 12),
-              ValueListenableBuilder<String>(
-                valueListenable: tamanhoTexto,
-                builder: (context, selecionado, child) => Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: tamanhosTexto.keys.map((nome) => ChoiceChip(
-                    label: Text(nome),
-                    selected: selecionado == nome,
-                    onSelected: _salvando ? null : (_) => _selecionarTamanho(nome),
-                  )).toList(),
+                const Text(
+                  'Tamanho do texto',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-              ),
-              const SizedBox(height: 12),
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Assim ficará o texto nas suas movimentações.'),
+                const SizedBox(height: 8),
+                const Text('Ajuste a leitura do aplicativo.'),
+                const SizedBox(height: 12),
+                ValueListenableBuilder<String>(
+                  valueListenable: tamanhoTexto,
+                  builder: (context, selecionado, child) => Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: tamanhosTexto.keys
+                        .map(
+                          (nome) => ChoiceChip(
+                            label: Text(nome),
+                            selected: selecionado == nome,
+                            onSelected: _salvando
+                                ? null
+                                : (_) => _selecionarTamanho(nome),
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Assim ficará o texto nas suas movimentações.'),
+                  ),
+                ),
               ]),
               if (_salvando)
                 const Padding(
@@ -6856,20 +6930,15 @@ class _TelaAparenciaState extends State<TelaAparencia> {
 }
 
 class TelaRegrasImportacao extends StatefulWidget {
-  const TelaRegrasImportacao({
-    super.key,
-    this.regraInicial,
-  });
+  const TelaRegrasImportacao({super.key, this.regraInicial});
 
   final Map<String, dynamic>? regraInicial;
 
   @override
-  State<TelaRegrasImportacao> createState() =>
-      _TelaRegrasImportacaoState();
+  State<TelaRegrasImportacao> createState() => _TelaRegrasImportacaoState();
 }
 
-class _TelaRegrasImportacaoState
-    extends State<TelaRegrasImportacao> {
+class _TelaRegrasImportacaoState extends State<TelaRegrasImportacao> {
   late Future<List<Map<String, dynamic>>> _consulta;
   bool _ocupado = false;
 
@@ -6882,9 +6951,7 @@ class _TelaRegrasImportacaoState
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
 
-        await _abrirFormularioRegra(
-          regra: widget.regraInicial,
-        );
+        await _abrirFormularioRegra(regra: widget.regraInicial);
 
         if (!mounted) return;
 
@@ -6901,9 +6968,7 @@ class _TelaRegrasImportacaoState
     });
   }
 
-    Future<void> _abrirFormularioRegra({
-    Map<String, dynamic>? regra,
-  }) async {
+  Future<void> _abrirFormularioRegra({Map<String, dynamic>? regra}) async {
     if (_ocupado) return;
 
     setState(() {
@@ -6922,8 +6987,7 @@ class _TelaRegrasImportacaoState
       int? categoriaId = regra?['categoria_id'] as int?;
 
       if (!categorias.any(
-        (categoria) =>
-            categoria.id == categoriaId && categoria.tipo == tipo,
+        (categoria) => categoria.id == categoriaId && categoria.tipo == tipo,
       )) {
         categoriaId = null;
       }
@@ -6967,9 +7031,7 @@ class _TelaRegrasImportacaoState
                       const SizedBox(height: 16),
                       DropdownButtonFormField<TipoMovimentacao>(
                         initialValue: tipo,
-                        decoration: const InputDecoration(
-                          labelText: 'Tipo',
-                        ),
+                        decoration: const InputDecoration(labelText: 'Tipo'),
                         items: const [
                           DropdownMenuItem(
                             value: TipoMovimentacao.receita,
@@ -7052,8 +7114,7 @@ class _TelaRegrasImportacaoState
                     onPressed: salvando
                         ? null
                         : () async {
-                            if (texto.trim().isEmpty ||
-                                categoriaId == null) {
+                            if (texto.trim().isEmpty || categoriaId == null) {
                               atualizarFormulario(() {
                                 mensagemErro =
                                     'Preencha a descrição e escolha '
@@ -7068,8 +7129,7 @@ class _TelaRegrasImportacaoState
                             });
 
                             try {
-                              await BancoDados.instancia
-                                  .salvarRegraImportacao(
+                              await BancoDados.instancia.salvarRegraImportacao(
                                 id: regra?['id'] as int?,
                                 texto: texto,
                                 tipo: tipo,
@@ -7171,9 +7231,7 @@ class _TelaRegrasImportacaoState
 
       if (confirmar != true || !mounted) return;
 
-      await BancoDados.instancia.excluirRegraImportacao(
-        regra['id'] as int,
-      );
+      await BancoDados.instancia.excluirRegraImportacao(regra['id'] as int);
 
       if (!mounted) return;
 
@@ -7217,9 +7275,7 @@ class _TelaRegrasImportacaoState
           IconButton(
             tooltip: 'Nova regra',
             icon: const Icon(Icons.add),
-            onPressed: _ocupado
-                ? null
-                : () => _abrirFormularioRegra(),
+            onPressed: _ocupado ? null : () => _abrirFormularioRegra(),
           ),
         ],
       ),
@@ -7230,11 +7286,8 @@ class _TelaRegrasImportacaoState
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _consulta,
               builder: (context, snapshot) {
-                if (snapshot.connectionState !=
-                    ConnectionState.done) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
                   return Center(
@@ -7303,9 +7356,7 @@ class _TelaRegrasImportacaoState
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            entrada
-                                ? Icons.arrow_upward
-                                : Icons.arrow_downward,
+                            entrada ? Icons.arrow_upward : Icons.arrow_downward,
                             size: 20,
                             color: entrada
                                 ? semantica.receita
@@ -7328,9 +7379,7 @@ class _TelaRegrasImportacaoState
                         trailing: IconButton(
                           tooltip: 'Excluir regra',
                           icon: const Icon(Icons.delete_outline),
-                          onPressed: _ocupado
-                              ? null
-                              : () => _excluir(regra),
+                          onPressed: _ocupado ? null : () => _excluir(regra),
                         ),
                       ),
                     );
@@ -7354,17 +7403,13 @@ class TelaConfiguracoes extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Configurações',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const _TituloConfiguracao(
-            titulo: 'Personalização',
-          ),
+          const _TituloConfiguracao(titulo: 'Personalização'),
 
           _ItemConfiguracao(
             icone: Icons.palette_outlined,
@@ -7373,9 +7418,7 @@ class TelaConfiguracoes extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const TelaAparencia(),
-                ),
+                MaterialPageRoute(builder: (_) => const TelaAparencia()),
               );
             },
           ),
@@ -7385,50 +7428,71 @@ class TelaConfiguracoes extends StatelessWidget {
             titulo: 'Categorias',
             subtitulo: 'Crie e organize suas categorias',
             onTap: () {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => const TelaCategorias(),
-    ),
-  );
-},
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TelaCategorias()),
+              );
+            },
           ),
 
           const SizedBox(height: 24),
 
-          const _TituloConfiguracao(
-            titulo: 'Seus dados',
-          ),
+          const _TituloConfiguracao(titulo: 'Seus dados'),
 
           _ItemConfiguracao(
             icone: Icons.account_balance_outlined,
             titulo: 'Contas/Bancos',
             subtitulo: 'Contas de origem dos extratos deste perfil',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
-              TelaContas(banco: ContasBanco(BancoDados.instancia.database)))),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TelaContas(
+                  banco: ContasBanco(BancoDados.instancia.database),
+                ),
+              ),
+            ),
           ),
           _ItemConfiguracao(
             icone: Icons.description_outlined,
             titulo: 'Exportar e Relatórios',
             subtitulo: 'CSV, Excel e relatório financeiro em PDF',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
-              TelaExportacao(database: BancoDados.instancia.database,
-                perfil: CadastroPerfis.atual.value.nome, perfis: CadastroPerfis.listar,
-                abrirPerfil: (perfil) => BancoDados.paraPerfil(perfil).database))),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TelaExportacao(
+                  database: BancoDados.instancia.database,
+                  perfil: CadastroPerfis.atual.value.nome,
+                  perfis: CadastroPerfis.listar,
+                  abrirPerfil: (perfil) =>
+                      BancoDados.paraPerfil(perfil).database,
+                ),
+              ),
+            ),
           ),
           _ItemConfiguracao(
             icone: Icons.restore_from_trash_outlined,
             titulo: 'Lixeira',
             subtitulo: 'Recupere lançamentos excluídos nos últimos 30 dias',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
-              TelaLixeira(banco: LixeiraBanco(BancoDados.instancia.database)))),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TelaLixeira(
+                  banco: LixeiraBanco(BancoDados.instancia.database),
+                ),
+              ),
+            ),
           ),
           _ItemConfiguracao(
             icone: Icons.fact_check_outlined,
             titulo: 'Preferências de contabilização',
             subtitulo: 'Revise sugestões salvas por conta e descrição',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
-              TelaPreferenciasContabilizacao(banco: BancoDados.instancia))),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    TelaPreferenciasContabilizacao(banco: BancoDados.instancia),
+              ),
+            ),
           ),
           _ItemConfiguracao(
             icone: Icons.rule_outlined,
@@ -7437,9 +7501,7 @@ class TelaConfiguracoes extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const TelaRegrasImportacao(),
-                ),
+                MaterialPageRoute(builder: (_) => const TelaRegrasImportacao()),
               );
             },
           ),
@@ -7451,18 +7513,14 @@ class TelaConfiguracoes extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const TelaGerenciarDados(),
-                ),
+                MaterialPageRoute(builder: (_) => const TelaGerenciarDados()),
               );
             },
           ),
 
           const SizedBox(height: 24),
 
-          const _TituloConfiguracao(
-            titulo: 'Sobre',
-          ),
+          const _TituloConfiguracao(titulo: 'Sobre'),
 
           _ItemConfiguracao(
             icone: Icons.info_outline,
@@ -7497,21 +7555,14 @@ class TelaConfiguracoes extends StatelessWidget {
 }
 
 class _TituloConfiguracao extends StatelessWidget {
-  const _TituloConfiguracao({
-    required this.titulo,
-  });
+  const _TituloConfiguracao({required this.titulo});
 
   final String titulo;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        12,
-        8,
-        12,
-        8,
-      ),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Text(
         titulo,
         style: TextStyle(
@@ -7546,15 +7597,10 @@ class _ItemConfiguracao extends StatelessWidget {
       color: esquema.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(RaioBorda.cartao),
-        side: BorderSide(
-          color: esquema.outlineVariant.withValues(alpha: 0.65),
-        ),
+        side: BorderSide(color: esquema.outlineVariant.withValues(alpha: 0.65)),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 6,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: Container(
           width: 40,
           height: 40,
@@ -7562,22 +7608,14 @@ class _ItemConfiguracao extends StatelessWidget {
             color: esquema.primaryContainer.withValues(alpha: 0.65),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            icone,
-            size: 20,
-            color: esquema.primary,
-          ),
+          child: Icon(icone, size: 20, color: esquema.primary),
         ),
         title: Text(
           titulo,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(subtitulo),
-        trailing: const Icon(
-          Icons.chevron_right,
-        ),
+        trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
     );
@@ -7602,8 +7640,7 @@ class _TelaCategoriasState extends State<TelaCategorias> {
   }
 
   Future<void> _carregarCategorias() async {
-    final categorias =
-        await BancoDados.instancia.listarCategorias();
+    final categorias = await BancoDados.instancia.listarCategorias();
 
     if (!mounted) return;
 
@@ -7616,50 +7653,38 @@ class _TelaCategoriasState extends State<TelaCategorias> {
   @override
   Widget build(BuildContext context) {
     final despesas = _categorias
-        .where(
-          (categoria) =>
-              categoria.tipo == TipoMovimentacao.despesa,
-        )
+        .where((categoria) => categoria.tipo == TipoMovimentacao.despesa)
         .toList();
 
     final receitas = _categorias
-        .where(
-          (categoria) =>
-              categoria.tipo == TipoMovimentacao.receita,
-        )
+        .where((categoria) => categoria.tipo == TipoMovimentacao.receita)
         .toList();
 
     return Scaffold(
       appBar: AppBar(
-  title: const Text(
-    'Categorias',
-    style: TextStyle(
-      fontWeight: FontWeight.bold,
-    ),
-  ),
-  actions: [
-    IconButton(
-      tooltip: 'Nova categoria',
-      icon: const Icon(Icons.add),
-      onPressed: () async {
-        final criada = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const TelaNovaCategoria(),
-          ),
-        );
+        title: const Text(
+          'Categorias',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Nova categoria',
+            icon: const Icon(Icons.add),
+            onPressed: () async {
+              final criada = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(builder: (_) => const TelaNovaCategoria()),
+              );
 
-        if (criada == true) {
-          _carregarCategorias();
-        }
-      },
-    ),
-  ],
-),
+              if (criada == true) {
+                _carregarCategorias();
+              }
+            },
+          ),
+        ],
+      ),
       body: _carregando
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -7700,12 +7725,7 @@ class _SecaoCategorias extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            12,
-            0,
-            12,
-            8,
-          ),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: Text(
             titulo,
             style: TextStyle(
@@ -7717,56 +7737,44 @@ class _SecaoCategorias extends StatelessWidget {
         ),
 
         ...categorias.map(
-              (categoria) =>
-              Card(
-                elevation: 0,
-                margin: const EdgeInsets.only(bottom: 8),
-                color: esquema.surfaceContainerLow,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(RaioBorda.cartao),
-                  side: BorderSide(
-                    color: esquema.outlineVariant.withValues(alpha: 0.65),
-                  ),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  leading: CircleAvatar(
-                    backgroundColor:
-                    categoria.cor.withValues(alpha: 0.15),
-                    child: Icon(
-                      categoria.icone,
-                      color: categoria.cor,
-                    ),
-                  ),
-                  title: Text(
-                    categoria.nome,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  trailing: const Icon(
-                    Icons.edit_outlined,
-                  ),
-                  onTap: () async {
-                    final alterada = await Navigator.push<bool>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            TelaNovaCategoria(
-                              categoria: categoria,
-                            ),
-                      ),
-                    );
-
-                    if (alterada == true) {
-                      onCategoriaAlterada();
-                    }
-                  },
-                ),
+          (categoria) => Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 8),
+            color: esquema.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(RaioBorda.cartao),
+              side: BorderSide(
+                color: esquema.outlineVariant.withValues(alpha: 0.65),
               ),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 4,
+              ),
+              leading: CircleAvatar(
+                backgroundColor: categoria.cor.withValues(alpha: 0.15),
+                child: Icon(categoria.icone, color: categoria.cor),
+              ),
+              title: Text(
+                categoria.nome,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: () async {
+                final alterada = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TelaNovaCategoria(categoria: categoria),
+                  ),
+                );
+
+                if (alterada == true) {
+                  onCategoriaAlterada();
+                }
+              },
+            ),
+          ),
         ),
       ],
     );
@@ -7774,16 +7782,12 @@ class _SecaoCategorias extends StatelessWidget {
 }
 
 class TelaNovaCategoria extends StatefulWidget {
-  const TelaNovaCategoria({
-    super.key,
-    this.categoria,
-  });
+  const TelaNovaCategoria({super.key, this.categoria});
 
   final Categoria? categoria;
 
   @override
-  State<TelaNovaCategoria> createState() =>
-      _TelaNovaCategoriaState();
+  State<TelaNovaCategoria> createState() => _TelaNovaCategoriaState();
 }
 
 class _TelaNovaCategoriaState extends State<TelaNovaCategoria> {
@@ -7795,19 +7799,19 @@ class _TelaNovaCategoriaState extends State<TelaNovaCategoria> {
   Color _corSelecionada = const Color(0xFF6750A4);
   bool get _editando => widget.categoria != null;
 
-@override
-void initState() {
-  super.initState();
+  @override
+  void initState() {
+    super.initState();
 
-  final categoria = widget.categoria;
+    final categoria = widget.categoria;
 
-  if (categoria != null) {
-    _nomeController.text = categoria.nome;
-    _tipo = categoria.tipo;
-    _iconeSelecionado = categoria.icone;
-    _corSelecionada = categoria.cor;
+    if (categoria != null) {
+      _nomeController.text = categoria.nome;
+      _tipo = categoria.tipo;
+      _iconeSelecionado = categoria.icone;
+      _corSelecionada = categoria.cor;
+    }
   }
-}
 
   final List<IconData> _icones = const [
     Icons.restaurant_outlined,
@@ -7850,221 +7854,208 @@ void initState() {
   }
 
   Future<void> _confirmarExclusao() async {
-  final categoria = widget.categoria;
+    final categoria = widget.categoria;
 
-  if (categoria == null || categoria.padrao) {
-    return;
-  }
+    if (categoria == null || categoria.padrao) {
+      return;
+    }
 
-  final quantidade = await BancoDados.instancia
-      .contarMovimentacoesCategoria(categoria);
+    final quantidade = await BancoDados.instancia.contarMovimentacoesCategoria(
+      categoria,
+    );
 
-  if (!mounted) return;
+    if (!mounted) return;
 
-  if (quantidade > 0) {
-  final categorias = await BancoDados.instancia.listarCategorias();
+    if (quantidade > 0) {
+      final categorias = await BancoDados.instancia.listarCategorias();
 
-  if (!mounted) return;
+      if (!mounted) return;
 
-  final destinos = categorias
-      .where(
-        (item) =>
-            item.tipo == categoria.tipo &&
-            item.id != categoria.id,
-      )
-      .toList();
+      final destinos = categorias
+          .where(
+            (item) => item.tipo == categoria.tipo && item.id != categoria.id,
+          )
+          .toList();
 
-  Categoria? destinoSelecionado;
+      Categoria? destinoSelecionado;
 
-  final mover = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return AlertDialog(
-            title: const Text(
-              'Categoria em uso',
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'A categoria "${categoria.nome}" possui '
-                  '$quantidade '
-                  '${quantidade == 1 ? 'movimentação' : 'movimentações'}.',
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Para não perder seus dados, escolha outra categoria '
-                  'para onde as movimentações serão transferidas.',
-                ),
-                const SizedBox(height: 20),
-                DropdownButtonFormField<Categoria>(
-                  initialValue: destinoSelecionado,
-                  decoration: const InputDecoration(
-                    labelText: 'Categoria de destino',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: destinos.map((item) {
-                    return DropdownMenuItem<Categoria>(
-                      value: item,
-                      child: Text(item.nome),
-                    );
-                  }).toList(),
-                  onChanged: (valor) {
-                    setStateDialog(() {
-                      destinoSelecionado = valor;
-                    });
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext, false);
-                },
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: destinoSelecionado == null
-                    ? null
-                    : () {
-                        Navigator.pop(dialogContext, true);
+      final mover = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return AlertDialog(
+                title: const Text('Categoria em uso'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'A categoria "${categoria.nome}" possui '
+                      '$quantidade '
+                      '${quantidade == 1 ? 'movimentação' : 'movimentações'}.',
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Para não perder seus dados, escolha outra categoria '
+                      'para onde as movimentações serão transferidas.',
+                    ),
+                    const SizedBox(height: 20),
+                    DropdownButtonFormField<Categoria>(
+                      initialValue: destinoSelecionado,
+                      decoration: const InputDecoration(
+                        labelText: 'Categoria de destino',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: destinos.map((item) {
+                        return DropdownMenuItem<Categoria>(
+                          value: item,
+                          child: Text(item.nome),
+                        );
+                      }).toList(),
+                      onChanged: (valor) {
+                        setStateDialog(() {
+                          destinoSelecionado = valor;
+                        });
                       },
-                child: const Text('Mover e excluir'),
-              ),
-            ],
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(dialogContext, false);
+                    },
+                    child: const Text('Cancelar'),
+                  ),
+                  FilledButton(
+                    onPressed: destinoSelecionado == null
+                        ? null
+                        : () {
+                            Navigator.pop(dialogContext, true);
+                          },
+                    child: const Text('Mover e excluir'),
+                  ),
+                ],
+              );
+            },
           );
         },
       );
-    },
-  );
 
-  if (mover != true || destinoSelecionado == null) {
-    return;
-  }
+      if (mover != true || destinoSelecionado == null) {
+        return;
+      }
 
-  await BancoDados.instancia.excluirCategoria(
-    categoria: categoria,
-    destino: destinoSelecionado,
-  );
-
-  if (!mounted) return;
-
-  Navigator.pop(context, true);
-  return;
-}
-
-  final confirmar = await showDialog<bool>(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text('Excluir categoria?'),
-        content: Text(
-          'Deseja excluir a categoria "${categoria.nome}"? '
-          'Esta ação não poderá ser desfeita.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir'),
-          ),
-        ],
+      await BancoDados.instancia.excluirCategoria(
+        categoria: categoria,
+        destino: destinoSelecionado,
       );
-    },
-  );
 
-  if (confirmar != true) return;
+      if (!mounted) return;
 
-  await BancoDados.instancia.excluirCategoria(
-    categoria: categoria,
-  );
-
-  if (!mounted) return;
-
-  Navigator.pop(context, true);
-}
-
-  Future<void> _salvar() async {
-  final nome = _nomeController.text.trim();
-
-  if (nome.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Digite um nome para a categoria.'),
-      ),
-    );
-    return;
-  }
-
-  final categoriaAtualizada = Categoria(
-    id: widget.categoria?.id,
-    nome: nome,
-    tipo: _tipo,
-    codigoIcone: _iconeSelecionado.codePoint,
-    codigoCor: _corSelecionada.toARGB32(),
-    padrao: widget.categoria?.padrao ?? false,
-  );
-
-  try {
-    if (_editando) {
-      await BancoDados.instancia.atualizarCategoria(
-        antiga: widget.categoria!,
-        atualizada: categoriaAtualizada,
-      );
-    } else {
-      await BancoDados.instancia.inserirCategoria(
-        categoriaAtualizada,
-      );
+      Navigator.pop(context, true);
+      return;
     }
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Excluir categoria?'),
+          content: Text(
+            'Deseja excluir a categoria "${categoria.nome}"? '
+            'Esta ação não poderá ser desfeita.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Excluir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) return;
+
+    await BancoDados.instancia.excluirCategoria(categoria: categoria);
 
     if (!mounted) return;
 
     Navigator.pop(context, true);
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          e is StateError
-              ? e.message
-              : _editando
-                  ? 'Não foi possível salvar. Já pode existir uma categoria com esse nome e tipo.'
-                  : 'Já existe uma categoria com esse nome e tipo.',
-        ),
-      ),
-    );
   }
-}
+
+  Future<void> _salvar() async {
+    final nome = _nomeController.text.trim();
+
+    if (nome.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Digite um nome para a categoria.')),
+      );
+      return;
+    }
+
+    final categoriaAtualizada = Categoria(
+      id: widget.categoria?.id,
+      nome: nome,
+      tipo: _tipo,
+      codigoIcone: _iconeSelecionado.codePoint,
+      codigoCor: _corSelecionada.toARGB32(),
+      padrao: widget.categoria?.padrao ?? false,
+    );
+
+    try {
+      if (_editando) {
+        await BancoDados.instancia.atualizarCategoria(
+          antiga: widget.categoria!,
+          atualizada: categoriaAtualizada,
+        );
+      } else {
+        await BancoDados.instancia.inserirCategoria(categoriaAtualizada);
+      }
+
+      if (!mounted) return;
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is StateError
+                ? e.message
+                : _editando
+                ? 'Não foi possível salvar. Já pode existir uma categoria com esse nome e tipo.'
+                : 'Já existe uma categoria com esse nome e tipo.',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-  title: Text(
-    _editando ? 'Editar categoria' : 'Nova categoria',
-    style: const TextStyle(
-      fontWeight: FontWeight.bold,
-    ),
-  ),
-  actions: [
-    if (_editando && widget.categoria?.padrao == false)
-      IconButton(
-        tooltip: 'Excluir categoria',
-        icon: const Icon(
-          Icons.delete_outline,
+        title: Text(
+          _editando ? 'Editar categoria' : 'Nova categoria',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        onPressed: _confirmarExclusao,
+        actions: [
+          if (_editando && widget.categoria?.padrao == false)
+            IconButton(
+              tooltip: 'Excluir categoria',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _confirmarExclusao,
+            ),
+        ],
       ),
-  ],
-),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -8080,10 +8071,7 @@ void initState() {
 
           const SizedBox(height: 20),
 
-          const Text(
-            'Tipo',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
+          const Text('Tipo', style: TextStyle(fontWeight: FontWeight.w700)),
 
           const SizedBox(height: 8),
 
@@ -8112,10 +8100,7 @@ void initState() {
 
           const SizedBox(height: 24),
 
-          const Text(
-            'Ícone',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
+          const Text('Ícone', style: TextStyle(fontWeight: FontWeight.w700)),
 
           const SizedBox(height: 12),
 
@@ -8137,16 +8122,12 @@ void initState() {
                   radius: 24,
                   backgroundColor: selecionado
                       ? _corSelecionada.withValues(alpha: 0.22)
-                      : Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: Icon(
                     icone,
                     color: selecionado
                         ? _corSelecionada
-                        : Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               );
@@ -8155,10 +8136,7 @@ void initState() {
 
           const SizedBox(height: 24),
 
-          const Text(
-            'Cor',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
+          const Text('Cor', style: TextStyle(fontWeight: FontWeight.w700)),
 
           const SizedBox(height: 12),
 
@@ -8166,8 +8144,7 @@ void initState() {
             spacing: 12,
             runSpacing: 12,
             children: _cores.map((cor) {
-              final selecionada =
-                  cor.toARGB32() == _corSelecionada.toARGB32();
+              final selecionada = cor.toARGB32() == _corSelecionada.toARGB32();
 
               return InkWell(
                 borderRadius: BorderRadius.circular(50),
@@ -8180,10 +8157,7 @@ void initState() {
                   radius: 20,
                   backgroundColor: cor,
                   child: selecionada
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.white,
-                        )
+                      ? const Icon(Icons.check, color: Colors.white)
                       : null,
                 ),
               );
@@ -8208,6 +8182,7 @@ void initState() {
     );
   }
 }
+
 class GraficoFluxoMensal extends StatefulWidget {
   const GraficoFluxoMensal({super.key, required this.dados});
   final List<ResumoMes> dados;
@@ -8218,13 +8193,27 @@ class GraficoFluxoMensal extends StatefulWidget {
 
 class _GraficoFluxoMensalState extends State<GraficoFluxoMensal> {
   String? _mesSelecionado;
-  static const _meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
-    'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  static const _meses = [
+    'Jan',
+    'Fev',
+    'Mar',
+    'Abr',
+    'Mai',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Set',
+    'Out',
+    'Nov',
+    'Dez',
+  ];
   String _chave(ResumoMes m) => '${m.ano}-${m.mes}';
   String _moeda(double v) {
     final partes = v.toStringAsFixed(2).split('.');
     final inteiro = partes[0].replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]}.',
+    );
     return 'R\$ $inteiro,${partes[1]}';
   }
 
@@ -8331,8 +8320,7 @@ class _GraficoFluxoMensalState extends State<GraficoFluxoMensal> {
                   child: Column(
                     children: [
                       Semantics(
-                        label:
-                            'Gráfico mensal. Use os botões dos meses abaixo para consultar os valores.',
+                        label: 'Gráfico mensal. Use os botões dos meses abaixo para consultar os valores.',
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTapDown: (evento) {
@@ -8451,10 +8439,7 @@ class _GraficoFluxoMensalState extends State<GraficoFluxoMensal> {
                       : atual.receitas > 0
                       ? '${(atual.despesas / atual.receitas * 100).toStringAsFixed(1).replaceAll('.', ',')}% das receitas comprometidas com despesas'
                       : 'Sem receitas para calcular a porcentagem.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cores.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 12, color: cores.onSurfaceVariant),
                 ),
               ],
             ),
@@ -8628,15 +8613,13 @@ class _MiniGraficoComparacao extends CustomPainter {
   bool shouldRepaint(covariant _MiniGraficoComparacao oldDelegate) => true;
 }
 
-
-
-
 class LembretesAgenda {
   static const _canal = MethodChannel('financas_facil/agenda');
   static bool get suportado => Platform.isAndroid;
   static Future<void> atualizarAgendamentos() async {
     if (suportado) await _canal.invokeMethod<void>('sincronizar');
   }
+
   static Future<bool> permitido({bool solicitar = false}) async {
     if (!suportado) return false;
     return await _canal.invokeMethod<bool>(solicitar ? 'permitir' : 'status') ??
@@ -8651,8 +8634,6 @@ class LembretesAgenda {
     await atualizarAgendamentos();
   }
 }
-
-
 
 String dinheiroAgenda(int centavos) {
   final partes = (centavos.abs() / 100).toStringAsFixed(2).split('.');
@@ -8702,6 +8683,7 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
       _carregar();
     }
   }
+
   @override
   void initState() {
     super.initState();
@@ -8724,7 +8706,8 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
     if (mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(texto)));
-  } }
+    }
+  }
 
   Future<void> _carregar() async {
     try {
@@ -8753,7 +8736,8 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
           setState(
             () => _erroLembretes = 'Não foi possível atualizar os lembretes. Toque em atualizar para tentar novamente.',
           );
-      } }
+        }
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -8819,8 +8803,8 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
                     lastDate: DateTime.now(),
                   );
                   if (escolha != null && context.mounted) {
-  atualizar(() => data = escolha);
-}
+                    atualizar(() => data = escolha);
+                  }
                 },
               ),
             ],
@@ -8902,58 +8886,94 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
   });
 
   Future<void> _selecionarMes() async {
-    final data = await showDatePicker(context: context, initialDate: _mes,
-      firstDate: DateTime(2000), lastDate: DateTime(2220, 12, 31),
-      helpText: 'Escolha o mês e o ano', initialDatePickerMode: DatePickerMode.year);
+    final data = await showDatePicker(
+      context: context,
+      initialDate: _mes,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2220, 12, 31),
+      helpText: 'Escolha o mês e o ano',
+      initialDatePickerMode: DatePickerMode.year,
+    );
     if (!mounted || data == null) return;
-    setState(() { _mes = DateTime(data.year, data.month); _dia = diaAgenda(data); });
+    setState(() {
+      _mes = DateTime(data.year, data.month);
+      _dia = diaAgenda(data);
+    });
   }
 
   Future<void> _excluirCompromisso(Previsto item) async {
     if (_ocupado) return;
-    final confirmou = await showDialog<bool>(context: context,
+    final confirmou = await showDialog<bool>(
+      context: context,
       builder: (context) => AlertDialog(
         title: const Text('Excluir compromisso?'),
-        content: Text('Excluir “${item.titulo}” do calendário? '
+        content: Text(
+          'Excluir “${item.titulo}” do calendário? '
           'Uma movimentação já registrada no Histórico será mantida. '
-          'As outras ocorrências da série serão mantidas.'),
+          'As outras ocorrências da série serão mantidas.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Voltar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Excluir')),
-        ]));
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Voltar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
     if (!mounted || confirmou != true) return;
     setState(() => _ocupado = true);
     try {
       await widget.banco.excluir(item);
       await _carregar();
-    } catch (_) { _aviso('Não foi possível excluir o compromisso.'); }
-    finally { if (mounted) setState(() => _ocupado = false); }
+    } catch (_) {
+      _aviso('Não foi possível excluir o compromisso.');
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
   }
 
   ColorScheme get _coresCalendario => Theme.of(context).colorScheme;
 
   Categoria? _categoriaVisual(Previsto item) {
     for (final categoria in widget.categoriasVisuais) {
-      if (categoria.nome == item.categoria && categoria.tipo.name == item.tipo) return categoria;
+      if (categoria.nome == item.categoria &&
+          categoria.tipo.name == item.tipo) {
+        return categoria;
+      }
     }
     return null;
   }
 
   Widget _menuCompromisso(Previsto item) => PopupMenuButton<String>(
-    enabled: !_ocupado, tooltip: 'Opções do compromisso',
+    enabled: !_ocupado,
+    tooltip: 'Opções do compromisso',
     padding: EdgeInsets.zero,
     constraints: const BoxConstraints(minWidth: 200),
     iconSize: 20,
     onSelected: (acao) {
-      if (acao == 'editar') { _editar(item); }
-      else if (acao == 'cancelar') { _cancelar(item); }
-      else { _excluirCompromisso(item); }
+      if (acao == 'editar') {
+        _editar(item);
+      } else if (acao == 'cancelar') {
+        _cancelar(item);
+      } else {
+        _excluirCompromisso(item);
+      }
     },
     itemBuilder: (_) => [
       if (item.status != 'cancelado')
-        const PopupMenuItem(value: 'editar', child: Text('Editar esta ocorrência')),
+        const PopupMenuItem(
+          value: 'editar',
+          child: Text('Editar esta ocorrência'),
+        ),
       if (item.pendente)
-        const PopupMenuItem(value: 'cancelar', child: Text('Cancelar previsão / série')),
+        const PopupMenuItem(
+          value: 'cancelar',
+          child: Text('Cancelar previsão / série'),
+        ),
       const PopupMenuItem(value: 'excluir', child: Text('Excluir compromisso')),
     ],
   );
@@ -8969,8 +8989,9 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
         final semantica = CoresSemanticas.de(sheetContext);
         final esquema = Theme.of(sheetContext).colorScheme;
         final corTipo = item.receita ? semantica.receita : semantica.despesa;
-        final corFundoTipo =
-            item.receita ? semantica.receitaFundo : semantica.despesaFundo;
+        final corFundoTipo = item.receita
+            ? semantica.receitaFundo
+            : semantica.despesaFundo;
         return SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
@@ -9150,18 +9171,23 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
   Future<void> _configurarLembretes() async {
     if (_ocupado) return;
     if (!LembretesAgenda.suportado) {
-      _aviso('Lembretes disponíveis no Android.'); return;
+      _aviso('Lembretes disponíveis no Android.');
+      return;
     }
     if (_erroLembretes != null) _aviso(_erroLembretes!);
     try {
       final ok = await LembretesAgenda.permitido(solicitar: !_permitido);
       if (!ok) _aviso('Permita as notificações nas configurações do Android.');
       await _carregar();
-    } catch (_) { _aviso('Não foi possível ativar os lembretes.'); }
+    } catch (_) {
+      _aviso('Não foi possível ativar os lembretes.');
+    }
   }
 
   Widget _cardCompromisso(Previsto item) => _CompromissoDiaCalendario(
-    item: item, categoria: _categoriaVisual(item), cores: _coresCalendario,
+    item: item,
+    categoria: _categoriaVisual(item),
+    cores: _coresCalendario,
     menu: _menuCompromisso(item),
     onDetalhes: () => _detalhesCompromisso(item),
     onRealizar: _ocupado ? null : () => _realizar(item),
@@ -9229,9 +9255,8 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
       ('Em aberto', semantica.alerta),
     ];
     return Theme(
-      data: Theme.of(
-        context,
-      ).copyWith(colorScheme: cor, visualDensity: VisualDensity.compact),
+      data: Theme.of(context)
+          .copyWith(colorScheme: cor, visualDensity: VisualDensity.compact),
       child: ColoredBox(
         color: cor.surface,
         child: RefreshIndicator(
@@ -9314,9 +9339,8 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
                               ),
                             ),
                             child: Text(
-                              MaterialLocalizations.of(
-                                context,
-                              ).formatMonthYear(_mes),
+                              MaterialLocalizations.of(context)
+                                  .formatMonthYear(_mes),
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: cor.onSurface,
@@ -9445,10 +9469,7 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
                                     : cor.surface,
                                 borderRadius: BorderRadius.circular(8),
                                 border: selecionado
-                                    ? Border.all(
-                                        color: cor.primary,
-                                        width: 1.4,
-                                      )
+                                    ? Border.all(color: cor.primary, width: 1.4)
                                     : data == hoje
                                     ? Border.all(color: cor.primary)
                                     : Border.all(
@@ -9584,13 +9605,12 @@ class _TelaAgendaState extends State<TelaAgenda> with WidgetsBindingObserver {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    for (final opcao
-                        in {
-                          'todos': 'Todos',
-                          'pendente': 'Pendentes',
-                          'realizado': 'Realizados',
-                          'atrasado': 'Atrasados ($atrasados)',
-                        }.entries)
+                    for (final opcao in {
+                      'todos': 'Todos',
+                      'pendente': 'Pendentes',
+                      'realizado': 'Realizados',
+                      'atrasado': 'Atrasados ($atrasados)',
+                    }.entries)
                       Padding(
                         padding: const EdgeInsets.only(right: 6),
                         child: ChoiceChip(
@@ -9805,7 +9825,15 @@ class _FormularioAgendaState extends State<FormularioAgenda> {
       if (!RegExp(r'^\d{1,9}(\.\d{1,2})?$').hasMatch(limpo)) return null;
     }
     final valor = double.tryParse(limpo);
-    return valor == null || valor <= 0 ? null : (valor * 100).round();
+    if (valor == null ||
+        !valor.isFinite ||
+        valor <= 0 ||
+        !(valor * 100).isFinite ||
+        (valor * 100) > maximoCentavosExatos) {
+      return null;
+    }
+    final centavos = centavosDeValor(valor);
+    return centavos > 0 ? centavos : null;
   }
 
   String _categoriaInicial(String tipo) {
@@ -9857,12 +9885,11 @@ class _FormularioAgendaState extends State<FormularioAgenda> {
     final esquema = Theme.of(context).colorScheme;
     final ehReceita = _tipo == 'receita';
     final corAtiva = ehReceita ? semantica.receita : semantica.despesa;
-    final corFundoAtiva =
-        ehReceita ? semantica.receitaFundo : semantica.despesaFundo;
-    final categorias = {
-      ...?widget.categorias[_tipo],
-      _categoria,
-    }.toList()..sort();
+    final corFundoAtiva = ehReceita
+        ? semantica.receitaFundo
+        : semantica.despesaFundo;
+    final categorias = {...?widget.categorias[_tipo], _categoria}.toList()
+      ..sort();
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -9993,10 +10020,7 @@ class _FormularioAgendaState extends State<FormularioAgenda> {
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
-                  trailing: Icon(
-                    Icons.calendar_month,
-                    color: esquema.primary,
-                  ),
+                  trailing: Icon(Icons.calendar_month, color: esquema.primary),
                   onTap: () async {
                     final data = await showDatePicker(
                       context: context,
@@ -10244,8 +10268,14 @@ class Previsto {
   final DateTime data;
   bool get pendente => status == 'pendente';
   bool get receita => tipo == 'receita';
-  String get rotuloFrequencia => const {'unica': 'Não repetir', 'semanal': 'Semanal',
-    'mensal': 'Mensal', 'anual': 'Anual'}[frequencia] ?? frequencia;
+  String get rotuloFrequencia =>
+      const {
+        'unica': 'Não repetir',
+        'semanal': 'Semanal',
+        'mensal': 'Mensal',
+        'anual': 'Anual',
+      }[frequencia] ??
+      frequencia;
   String rotuloStatus(DateTime hoje) {
     if (status == 'cancelado') return 'Cancelado';
     if (!pendente) return receita ? 'Recebido' : 'Pago';
@@ -10253,6 +10283,7 @@ class Previsto {
     if (data.isBefore(dia)) return 'Vencido • pendente';
     return data.isAfter(dia) ? 'Previsto' : 'Pendente';
   }
+
   factory Previsto.mapa(Map<String, Object?> m) => Previsto(
     id: m['id'] as int,
     serie: m['serie'] as String,
@@ -10260,7 +10291,9 @@ class Previsto {
     tipo: m['tipo'] as String,
     centavos: m['centavos'] as int,
     categoria: m['categoria'] as String,
-    data: DateTime.parse(m['data'] as String),
+    data:
+        dataRegistro(m['data'] as String) ??
+        (throw const FormatException('Data inválida no compromisso.')),
     frequencia: m['frequencia'] as String,
     lembrete: m['lembrete'] as int?,
     hora: m['hora'] as int,
@@ -10271,7 +10304,6 @@ class Previsto {
   );
 }
 
-
 class AgendaBanco {
   AgendaBanco(this.database);
   final Future<Database> database;
@@ -10281,16 +10313,20 @@ class AgendaBanco {
       final colunas = await db.rawQuery('PRAGMA table_info($tabela)');
       for (final campo in ['conta', 'observacoes']) {
         if (!colunas.any((c) => c['name'] == campo)) {
-          await db.execute("ALTER TABLE $tabela ADD COLUMN $campo TEXT NOT NULL DEFAULT ''");
+          await db.execute(
+            "ALTER TABLE $tabela ADD COLUMN $campo TEXT NOT NULL DEFAULT ''",
+          );
         }
       }
     }
     // Uma exclusão pelo Histórico reabre a previsão, sem recriar pagamentos.
-    await db.execute('''CREATE TRIGGER IF NOT EXISTS agenda_movimentacao_excluida
+    await db.execute(
+      '''CREATE TRIGGER IF NOT EXISTS agenda_movimentacao_excluida
       AFTER DELETE ON movimentacoes BEGIN
         UPDATE agenda SET status = 'pendente', movimentacao_id = NULL
         WHERE movimentacao_id = OLD.id AND status = 'realizado';
-      END''');
+      END''',
+    );
     await db.execute('''CREATE TRIGGER IF NOT EXISTS agenda_movimentacao_editada
       AFTER UPDATE ON movimentacoes BEGIN
         UPDATE agenda SET titulo = NEW.descricao, tipo = NEW.tipo,
@@ -10304,6 +10340,7 @@ class AgendaBanco {
         WHERE categoria = OLD.nome AND tipo = OLD.tipo;
       END''');
   }
+
   static Future<void> criar(DatabaseExecutor db) async {
     await db.execute('''CREATE TABLE IF NOT EXISTS agenda (
       id INTEGER PRIMARY KEY AUTOINCREMENT, serie TEXT NOT NULL,
@@ -10340,6 +10377,10 @@ class AgendaBanco {
   }) async {
     if (titulo.trim().isEmpty ||
         centavos <= 0 ||
+        centavos > maximoCentavosExatos ||
+        !{'receita', 'despesa'}.contains(tipo) ||
+        categoria.trim().isEmpty ||
+        (lembrete != null && lembrete < 0) ||
         hora < 0 ||
         hora > 23 ||
         minuto < 0 ||
@@ -10365,8 +10406,11 @@ class AgendaBanco {
         'observacoes': observacoes.trim(),
       };
       if (existente != null) {
-        final linhas = await txn.query('agenda', where: "id = ? AND status != 'cancelado'",
-          whereArgs: [existente.id]);
+        final linhas = await txn.query(
+          'agenda',
+          where: "id = ? AND status != 'cancelado'",
+          whereArgs: [existente.id],
+        );
         if (linhas.isEmpty) throw StateError('Compromisso indisponível.');
         final atual = linhas.single;
         final alterados = await txn.update(
@@ -10379,11 +10423,22 @@ class AgendaBanco {
           throw StateError('Este lançamento não está mais pendente.');
         }
         if (atual['status'] == 'realizado') {
-          final quantidade = await txn.update('movimentacoes', {
-            'descricao': titulo.trim(), 'tipo': tipo, 'valor': centavos / 100,
-            'categoria': categoria, 'conta': conta.trim(), 'observacoes': observacoes.trim(),
-          }, where: 'id = ?', whereArgs: [atual['movimentacao_id']]);
-          if (quantidade != 1) throw StateError('Movimentação vinculada não encontrada.');
+          final quantidade = await txn.update(
+            'movimentacoes',
+            {
+              'descricao': titulo.trim(),
+              'tipo': tipo,
+              'valor': centavos / 100,
+              'categoria': categoria,
+              'conta': conta.trim(),
+              'observacoes': observacoes.trim(),
+            },
+            where: 'id = ?',
+            whereArgs: [atual['movimentacao_id']],
+          );
+          if (quantidade != 1) {
+            throw StateError('Movimentação vinculada não encontrada.');
+          }
         }
       } else {
         final serie = '${DateTime.now().microsecondsSinceEpoch}';
@@ -10459,14 +10514,10 @@ class AgendaBanco {
   }
 
   Future<void> excluir(Previsto item) async {
-    await (await database).delete('agenda', where: 'id = ?', whereArgs: [item.id]);
+    await (await database).delete(
+      'agenda',
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
   }
 }
-
-
-
-
-
-
-
-

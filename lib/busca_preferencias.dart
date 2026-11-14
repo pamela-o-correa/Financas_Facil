@@ -13,7 +13,12 @@ int? valorPesquisadoEmCentavos(String pesquisa) {
     return null;
   }
   final valor = double.tryParse(texto);
-  return valor == null || !valor.isFinite || !(valor * 100).isFinite ? null : (valor * 100).round();
+  return valor == null ||
+          !valor.isFinite ||
+          !(valor * 100).isFinite ||
+          (valor * 100).abs() > maximoCentavosExatos
+      ? null
+      : (valor * 100).round();
 }
 
 List<Movimentacao> filtrarHistorico(
@@ -384,7 +389,9 @@ class _TelaPreferenciasContabilizacaoState
                         PopupMenuItem(
                           value: 'inverter',
                           child: Text(
-                            r.ativa ? 'Sugerir desativação' : 'Sugerir ativação',
+                            r.ativa
+                                ? 'Sugerir desativação'
+                                : 'Sugerir ativação',
                           ),
                         ),
                         const PopupMenuItem(
@@ -402,4 +409,3 @@ class _TelaPreferenciasContabilizacaoState
     );
   }
 }
-

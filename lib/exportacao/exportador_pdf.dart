@@ -225,7 +225,9 @@ Future<Uint8List> gerarPdf(
         style: const pw.TextStyle(fontSize: 8),
       ),
   ]);
-  if (d.maiores.isNotEmpty || d.categorias.isNotEmpty || d.evolucao.isNotEmpty) {
+  if (d.maiores.isNotEmpty ||
+      d.categorias.isNotEmpty ||
+      d.evolucao.isNotEmpty) {
     paginas([
       if (d.maiores.isNotEmpty) ...[
         titulo('Maiores despesas do período'),

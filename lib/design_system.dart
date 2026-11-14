@@ -324,8 +324,16 @@ ThemeData construirTemaPremium({
     // Versão noturna harmônica para Espresso, Sage e Amethyst quando o modo escuro é forçado.
     background = Color.lerp(const Color(0xFF0E1013), paleta.primary, 0.16)!;
     surface = Color.lerp(const Color(0xFF17191E), paleta.primary, 0.22)!;
-    surfaceContainer = Color.lerp(const Color(0xFF23262D), paleta.secondary, 0.24)!;
-    primary = Color.lerp(const Color(0xFFF3F4F6), paleta.surfaceContainer, 0.55)!;
+    surfaceContainer = Color.lerp(
+      const Color(0xFF23262D),
+      paleta.secondary,
+      0.24,
+    )!;
+    primary = Color.lerp(
+      const Color(0xFFF3F4F6),
+      paleta.surfaceContainer,
+      0.55,
+    )!;
     onPrimary = Color.lerp(const Color(0xFF111215), paleta.primary, 0.45)!;
     secondary = Color.lerp(const Color(0xFFB8BDC6), paleta.secondary, 0.45)!;
     primaryText = const Color(0xFFF5F5F3);
@@ -355,21 +363,23 @@ ThemeData construirTemaPremium({
     onSurfaceVariant: secondaryText,
     surfaceContainerLowest: background,
     surfaceContainerLow: surface,
-    surfaceContainer: surfaceContainer.withValues(alpha: usarEscuro ? 0.65 : 0.45),
-    surfaceContainerHigh: surfaceContainer.withValues(alpha: usarEscuro ? 0.85 : 0.72),
+    surfaceContainer: surfaceContainer.withValues(
+      alpha: usarEscuro ? 0.65 : 0.45,
+    ),
+    surfaceContainerHigh: surfaceContainer.withValues(
+      alpha: usarEscuro ? 0.85 : 0.72,
+    ),
     surfaceContainerHighest: surfaceContainer,
     outline: outline,
     outlineVariant: outline.withValues(alpha: usarEscuro ? 0.65 : 0.55),
     error: despesa,
   );
 
-  final baseText = (usarEscuro
-          ? Typography.material2021().white
-          : Typography.material2021().black)
-      .apply(
-        bodyColor: primaryText,
-        displayColor: primaryText,
-      );
+  final baseText =
+      (usarEscuro
+              ? Typography.material2021().white
+              : Typography.material2021().black)
+          .apply(bodyColor: primaryText, displayColor: primaryText);
 
   final textTheme = baseText.copyWith(
     headlineLarge: baseText.headlineLarge?.copyWith(
@@ -394,18 +404,9 @@ ThemeData construirTemaPremium({
       letterSpacing: -0.1,
       color: primaryText,
     ),
-    bodyLarge: baseText.bodyLarge?.copyWith(
-      color: primaryText,
-      height: 1.35,
-    ),
-    bodyMedium: baseText.bodyMedium?.copyWith(
-      color: primaryText,
-      height: 1.35,
-    ),
-    bodySmall: baseText.bodySmall?.copyWith(
-      color: secondaryText,
-      height: 1.3,
-    ),
+    bodyLarge: baseText.bodyLarge?.copyWith(color: primaryText, height: 1.35),
+    bodyMedium: baseText.bodyMedium?.copyWith(color: primaryText, height: 1.35),
+    bodySmall: baseText.bodySmall?.copyWith(color: secondaryText, height: 1.3),
     labelLarge: baseText.labelLarge?.copyWith(
       fontWeight: FontWeight.w600,
       letterSpacing: 0.1,
@@ -493,10 +494,7 @@ ThemeData construirTemaPremium({
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(RaioBorda.md),
         ),
-        textStyle: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -587,10 +585,9 @@ ThemeData construirTemaPremium({
         despesa: despesa,
         despesaFundo: despesa.withValues(alpha: usarEscuro ? 0.16 : 0.11),
         alerta: usarEscuro ? const Color(0xFFF6AD55) : const Color(0xFFB4690E),
-        alertaFundo: (usarEscuro
-                ? const Color(0xFFF6AD55)
-                : const Color(0xFFB4690E))
-            .withValues(alpha: usarEscuro ? 0.16 : 0.12),
+        alertaFundo:
+            (usarEscuro ? const Color(0xFFF6AD55) : const Color(0xFFB4690E))
+                .withValues(alpha: usarEscuro ? 0.16 : 0.12),
         bordaSutil: colorScheme.outlineVariant,
         textoSecundario: secondaryText,
         paletaGrafico: paleta.paletaGrafico,
@@ -629,10 +626,7 @@ class CartaoMinimalista extends StatelessWidget {
       color: corFundo ?? esquema.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(raio),
-        side: BorderSide(
-          color: corBorda ?? esquema.outlineVariant,
-          width: 1,
-        ),
+        side: BorderSide(color: corBorda ?? esquema.outlineVariant, width: 1),
       ),
       clipBehavior: Clip.antiAlias,
       child: onTap == null
