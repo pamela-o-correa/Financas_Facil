@@ -31,7 +31,26 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/android/build/
 /coverage/
+/.qa/
+/AUDITORIA_*.md
+/DIAGNOSTICO_*.md
+*.jks
+*.keystore
+*.p12
+*.ffbackup
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.apk
+*.aab
+key.properties
+.env
+.env.*
+!.env.example
+__pycache__/
 
 # Symbolication related
 app.*.symbols
